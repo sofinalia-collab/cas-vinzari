@@ -70,6 +70,8 @@ td.n,th.n{text-align:right;white-space:nowrap}
 .rc .sub{color:var(--muted);font-size:12px}
 .rc .tot{font-weight:700;font-size:17px}
 @media print{body>*:not(#receipt-modal){display:none!important}#receipt-modal{position:static;background:none;padding:0}.modal-box{box-shadow:none;max-width:none}.no-print{display:none!important}}
+body.shared-view header,body.shared-view nav,body.shared-view main{display:none}
+body.shared-view .modal{position:static;background:none}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
 .kpis div{background:var(--bg);border-radius:8px;padding:10px}
 .kpis b{display:block;font-size:20px}
@@ -250,9 +252,14 @@ td.n,th.n{text-align:right;white-space:nowrap}
 <div id="receipt-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="rc-title">
   <div class="modal-box">
     <div id="receipt"></div>
-    <div class="row no-print" style="margin-top:14px">
+    <div class="row no-print" style="margin-top:14px;flex-wrap:wrap">
+      <button class="b" id="rc-share" type="button" style="flex:1 1 100%">📤 Trimite bonul (link)</button>
       <button class="b ghost" id="rc-print" type="button" style="flex:1">Tipărește</button>
-      <button class="b" id="rc-close" type="button" style="flex:1">Închide</button>
+      <button class="b ghost" id="rc-close" type="button" style="flex:1">Închide</button>
+    </div>
+    <div id="rc-link-box" class="no-print hidden" style="margin-top:10px">
+      <div class="muted" style="margin-bottom:4px">Linkul a fost copiat. Îl poți lipi în Viber, Telegram sau SMS:</div>
+      <input id="rc-link" readonly onclick="this.select()">
     </div>
   </div>
 </div>
@@ -833,6 +840,10 @@ $("#rep-xlsx").onclick = () => {
 // ---------- vizualizare bon ----------
 function showReceipt(no){
   const s = sales.find(x => String(x.no) === String(no)); if (!s) return;
+  renderReceipt(s);
+}
+function renderReceipt(s){
+  shownSale = s; $("#rc-link-box").classList.add("hidden");
   const items = s.items.map(i => {
     const unit = i.unit ?? i.price, gross = Math.round(i.price*100)*i.qty/100, net = Math.round(unit*100)*i.qty/100;
     return `<div class="it"><div>${esc(i.name)}</div>
@@ -856,7 +867,50 @@ function showReceipt(no){
   $("#receipt-modal").classList.remove("hidden");
   $("#rc-close").focus();
 }
-const closeReceipt = () => $("#receipt-modal").classList.add("hidden");
+let shownSale = null;
+// ---------- bon trimis ca link ----------
+// Datele bonului stau în partea de după # a adresei: nu ajung la niciun server, doar la cine primește linkul.
+const b64u = bytes => { let s = ""; bytes.forEach(b => s += String.fromCharCode(b)); return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); };
+const unb64u = str => { const s = atob(str.replace(/-/g,"+").replace(/_/g,"/")); return Uint8Array.from(s, c => c.charCodeAt(0)); };
+async function pipeBytes(bytes, stream){ return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer()); }
+async function encodeSale(s){
+  const o = {n:s.no, d:s.date, p:s.pay, g:s.gross ?? s.total, x:s.discount || 0, t:s.total,
+    i:s.items.map(i => [i.name, i.sku || "", i.code, i.qty, i.price, i.disc || 0, i.unit ?? i.price])};
+  const raw = new TextEncoder().encode(JSON.stringify(o));
+  if (window.CompressionStream){ try{ return "z" + b64u(await pipeBytes(raw, new CompressionStream("deflate-raw"))); }catch(e){} }
+  return "j" + b64u(raw);
+}
+async function decodeSale(str){
+  let bytes = unb64u(str.slice(1));
+  if (str[0] === "z") bytes = await pipeBytes(bytes, new DecompressionStream("deflate-raw"));
+  const o = JSON.parse(new TextDecoder().decode(bytes));
+  return {no:o.n, date:o.d, pay:o.p, gross:o.g, discount:o.x, total:o.t,
+    items:o.i.map(a => ({name:a[0], sku:a[1], code:a[2], qty:a[3], price:a[4], disc:a[5], unit:a[6]}))};
+}
+async function receiptLink(s){ return location.origin + location.pathname + "#bon=" + await encodeSale(s); }
+$("#rc-share").onclick = async () => {
+  if (!shownSale) return;
+  const url = await receiptLink(shownSale);
+  const title = "Bon nr. " + shownSale.no + " · " + fmt(shownSale.total);
+  if (navigator.share){
+    try{ await navigator.share({title, text:title, url}); return; }
+    catch(e){ if (e && e.name === "AbortError") return; }
+  }
+  $("#rc-link").value = url; $("#rc-link-box").classList.remove("hidden");
+  try{ await navigator.clipboard.writeText(url); }catch(e){ $("#rc-link-box .muted").textContent = "Copiază linkul de mai jos și lipește-l în Viber, Telegram sau SMS:"; }
+  $("#rc-link").select();
+};
+// Deschis din link: arată doar bonul.
+async function openSharedReceipt(){
+  const m = location.hash.match(/^#bon=([zj][A-Za-z0-9_-]+)$/);
+  if (!m) return false;
+  document.body.classList.add("shared-view");
+  try{ renderReceipt(await decodeSale(m[1])); }
+  catch(e){ $("#receipt").innerHTML = `<div class="rc"><h3>Bonul nu poate fi deschis</h3><div class="c">Linkul este incomplet sau deteriorat.</div></div>`; $("#receipt-modal").classList.remove("hidden"); }
+  $("#rc-close").classList.add("hidden"); $("#rc-share").classList.add("hidden");
+  return true;
+}
+const closeReceipt = () => { if (!document.body.classList.contains("shared-view")) $("#receipt-modal").classList.add("hidden"); };
 $("#rc-close").onclick = closeReceipt;
 $("#rc-print").onclick = () => window.print();
 $("#receipt-modal").addEventListener("click", e => { if (e.target.id === "receipt-modal") closeReceipt(); });
@@ -879,6 +933,7 @@ $("#sales-export").onclick = () => download("vanzari.csv", "nr;data;articol;cod 
 
 renderCart(); renderProducts(); renderHistory(); renderReport(); renderCatInfo(); renderUser();
 (async () => {
+  if (await openSharedReceipt()) return;
   if (!REMOTE){ showTab("sell"); return; }
   showTab("price");
   await loadMe(); renderUser();
