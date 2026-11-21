@@ -72,6 +72,8 @@ td.n,th.n{text-align:right;white-space:nowrap}
 @media print{body>*:not(#receipt-modal){display:none!important}#receipt-modal{position:static;background:none;padding:0}.modal-box{box-shadow:none;max-width:none}.no-print{display:none!important}}
 body.shared-view header,body.shared-view nav,body.shared-view main{display:none}
 body.shared-view .modal{position:static;background:none}
+tr.deleted td{color:var(--muted);text-decoration:line-through}
+tr.deleted td:last-child{text-decoration:none}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
 .kpis div{background:var(--bg);border-radius:8px;padding:10px}
 .kpis b{display:block;font-size:20px}
@@ -237,6 +239,7 @@ body.shared-view .modal{position:static;background:none}
     <h2>Vânzări</h2>
     <div class="row" style="margin-bottom:10px;flex-wrap:wrap">
       <span id="hist-summary" style="flex:1"></span>
+      <label class="muted" style="display:flex;gap:6px;align-items:center;white-space:nowrap"><input type="checkbox" id="show-deleted" style="width:auto"> Arată bonurile eliminate</label>
       <button class="b ghost" id="sales-export" type="button">Export vânzări CSV</button>
     </div>
     <div class="scroll"><table>
@@ -247,6 +250,18 @@ body.shared-view .modal{position:static;background:none}
   </div>
 </section>
 </main>
+
+<!-- CONFIRMARE -->
+<div id="ask-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="ask-title">
+  <div class="modal-box" style="max-width:360px">
+    <h3 id="ask-title" style="margin:0 0 8px;font-size:20px"></h3>
+    <div id="ask-text" style="margin-bottom:14px"></div>
+    <div class="row">
+      <button class="b ghost" id="ask-no" type="button" style="flex:1">Nu (Esc)</button>
+      <button class="b" id="ask-yes" type="button" style="flex:1">Da (Enter)</button>
+    </div>
+  </div>
+</div>
 
 <!-- BON -->
 <div id="receipt-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="rc-title">
@@ -487,7 +502,7 @@ function handleCode(raw){
     msg($("#scan-msg"), "Codul „" + q + "” nu există în nomenclator." + (isAdmin() ? " Adaugă-l în fila Produse." : ""), false);
   }
 }
-$("#scan-form").onsubmit = e => { e.preventDefault(); submitScan(); };
+$("#scan-form").onsubmit = e => { e.preventDefault(); if (currentTab === "sell" && !$("#scan-input").value.trim() && cart.length) return askPay(); submitScan(); };
 function submitScan(){ clearTimeout(autoT); const v = $("#scan-input").value; $("#scan-input").value = ""; handleCode(v); $("#scan-input").focus(); }
 // Scaner USB = tastatură. Unele scanere trimit Tab în loc de Enter, altele nimic.
 let autoT = null;
@@ -538,6 +553,7 @@ document.addEventListener("keydown", e => {
   if (now - kbLast > 120) kbBuf = "";
   kbLast = now;
   if ((e.key === "Enter" || e.key === "Tab") && kbBuf.length >= 3){ e.preventDefault(); handleCode(kbBuf); kbBuf = ""; $("#scan-input").focus(); return; }
+  if (e.key === "Enter"){ kbBuf = ""; if (currentTab === "sell" && cart.length && t.tagName !== "BUTTON"){ e.preventDefault(); askPay(); } return; }
   if (e.key.length === 1){ kbBuf += e.key; if (kbBuf.length >= 6 && findByCode(kbBuf)){ clearTimeout(autoT); const c = kbBuf; autoT = setTimeout(() => { if (kbBuf === c){ handleCode(c); kbBuf = ""; } }, 350); } }
 });
 // clic oriunde în fila Vânzare readuce focusul în câmpul de scanare
@@ -765,7 +781,7 @@ const dayKey = iso => { const d = new Date(iso); return d.getFullYear()+"-"+pad(
 const dayLabel = k => k.split("-").reverse().join(".");
 const r2 = x => Math.round(x*100)/100;
 function dayReport(key){
-  const list = sales.filter(s => dayKey(s.date) === key);
+  const list = activeSales().filter(s => dayKey(s.date) === key);
   const byProd = {};
   const pay = {};
   let gross = 0, total = 0;
@@ -793,7 +809,7 @@ function renderReport(){
   $("#rep-body").innerHTML = r.prods.map(p => `<tr><td>${esc(p.sku)}</td><td>${esc(p.code)}</td><td>${esc(p.name)}</td><td class="n">${p.qty}</td><td class="n">${fmt(p.gross)}</td><td class="n">${fmt(p.disc)}</td><td class="n">${fmt(p.net)}</td></tr>`).join("");
   $("#rep-empty").classList.toggle("hidden", r.list.length > 0);
   $("#rep-xlsx").disabled = !r.list.length;
-  const keys = [...new Set(sales.map(s => dayKey(s.date)))].sort().reverse();
+  const keys = [...new Set(activeSales().map(s => dayKey(s.date)))].sort().reverse();
   $("#days-body").innerHTML = keys.map(k => { const d = dayReport(k); return `<tr data-k="${k}"><td>${dayLabel(k)}</td><td class="n">${d.list.length}</td><td class="n">${fmt(d.gross)}</td><td class="n">${fmt(d.disc)}</td><td class="n"><b>${fmt(d.total)}</b></td></tr>`; }).join("") || `<tr><td colspan="5" class="empty">Nicio vânzare încă.</td></tr>`;
   $("#days-body").querySelectorAll("tr[data-k]").forEach(tr => tr.onclick = () => { inp.value = tr.dataset.k; renderReport(); window.scrollTo({top:0, behavior:"smooth"}); });
 }
@@ -815,6 +831,52 @@ $("#rep-xlsx").onclick = () => {
   saveFile("raport-vanzari-" + r.key + ".xlsx", new Blob([XLSX.write(wb, {bookType:"xlsx", type:"array"})]));
 };
 
+// ---------- confirmare (Enter = Da, Esc = Nu) ----------
+let askResolve = null;
+function ask(title, html, yesLabel, danger){
+  $("#ask-title").textContent = title; $("#ask-text").innerHTML = html;
+  $("#ask-yes").textContent = (yesLabel || "Da") + " (Enter)";
+  $("#ask-yes").className = danger ? "b red" : "b";
+  $("#ask-modal").classList.remove("hidden"); $("#ask-yes").focus();
+  return new Promise(res => askResolve = res);
+}
+function askDone(v){ if (!askResolve) return; $("#ask-modal").classList.add("hidden"); const r = askResolve; askResolve = null; r(v); }
+const askOpen = () => !!askResolve;
+$("#ask-yes").onclick = () => askDone(true);
+$("#ask-no").onclick = () => askDone(false);
+$("#ask-modal").addEventListener("click", e => { if (e.target.id === "ask-modal") askDone(false); });
+document.addEventListener("keydown", e => {
+  if (!askOpen()) return;
+  if (e.key === "Enter"){ e.preventDefault(); e.stopImmediatePropagation(); askDone(true); }
+  else if (e.key === "Escape"){ e.preventDefault(); e.stopImmediatePropagation(); askDone(false); }
+  else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey){
+    // a început o scanare cât era deschisă întrebarea: o închidem și lăsăm codul să ajungă în câmpul de scanare
+    askDone(false); kbBuf = ""; if (scanActive()){ $("#scan-input").focus(); }
+  }
+}, true);
+
+// Enter cu câmpul de scanare gol = „Încasăm?”; al doilea Enter încasează.
+async function askPay(){
+  if (!cart.length || askOpen()) return;
+  const t = cartTotals();
+  const ok = await ask("Încasăm?", `Total: <b style="font-size:22px">${fmt(t.total)}</b><div class="muted">${cart.reduce((a,l) => a + l.qty, 0)} produse · plată: ${esc($("#pay-method").value)}</div>`, "Încasează");
+  if (ok) $("#cart-pay").click(); else $("#scan-input").focus();
+}
+
+// ---------- eliminare bon (bon greșit) ----------
+// Bonul nu se șterge definitiv: se marchează „eliminat”, dispare din rapoarte și din istoric
+// și poate fi văzut cu „Arată bonurile eliminate”.
+const activeSales = () => sales.filter(s => !s.deleted);
+async function deleteSale(no){
+  const s = sales.find(x => String(x.no) === String(no)); if (!s || s.deleted) return;
+  if (REMOTE){ toast("Cu baza centrală, bonurile se pot elimina doar de administrator din Supabase."); return; }
+  const ok = await ask("Elimini bonul nr. " + s.no + "?", `${new Date(s.date).toLocaleString("ro-RO")} · <b>${fmt(s.total)}</b><div class="muted" style="margin-top:6px">Bonul dispare din istoric și din rapoarte. Rămâne vizibil la „Arată bonurile eliminate”.</div>`, "Elimină", true);
+  if (!ok) return;
+  s.deleted = new Date().toISOString(); saveSales();
+  renderHistory(); renderReport();
+  toast("Bonul nr. " + s.no + " a fost eliminat.");
+}
+
 // ---------- vizualizare bon ----------
 function showReceipt(no){
   const s = sales.find(x => String(x.no) === String(no)); if (!s) return;
@@ -832,7 +894,7 @@ function renderReceipt(s){
   }).join("");
   const qty = s.items.reduce((a,i) => a + i.qty, 0);
   $("#receipt").innerHTML = `<div class="rc">
-    <h3 id="rc-title">Bon nr. ${esc(s.no)}${s.pending ? " (netrimis)" : ""}</h3>
+    <h3 id="rc-title">Bon nr. ${esc(s.no)}${s.pending ? " (netrimis)" : ""}${s.deleted ? " (ELIMINAT)" : ""}</h3>
     <div class="c">${new Date(s.date).toLocaleString("ro-RO")}${s.seller ? " · " + esc(s.seller) : ""}</div>
     <hr>${items}<hr>
     <div class="ln"><span>Produse</span><span>${qty} buc. (${s.items.length} poziții)</span></div>
@@ -904,17 +966,21 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#recei
 // ---------- istoric ----------
 function renderHistory(){
   const today = new Date().toDateString();
-  const t = sales.filter(s => new Date(s.date).toDateString() === today);
+  const t = activeSales().filter(s => new Date(s.date).toDateString() === today);
   const sum = t.reduce((a,s) => a + Math.round(s.total*100), 0) / 100;
   const g = t.reduce((a,s) => a + Math.round((s.gross ?? s.total)*100), 0) / 100;
   $("#hist-summary").textContent = `Azi: ${t.length} vânzări · fără reducere ${fmt(g)} · reduceri ${fmt(Math.round((g-sum)*100)/100)} · încasat ${fmt(sum)}`;
-  $("#hist-body").innerHTML = sales.slice().sort((a,b) => new Date(b.date) - new Date(a.date)).map(s => `<tr><td>${esc(s.no)}${s.pending ? `<div class="muted">netrimis</div>` : ""}</td><td>${new Date(s.date).toLocaleString("ro-RO")}${s.seller && isAdmin() ? `<div class="muted">${esc(s.seller)}</div>` : ""}</td>
-    <td>${s.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")}</td><td>${esc(s.pay)}</td><td class="n">${s.items.reduce((a,i) => a + i.qty, 0)}${s.items.length > 1 ? `<div class="muted">${s.items.length} poziții</div>` : ""}</td><td class="n">${fmt(s.gross ?? s.total)}</td><td class="n">${fmt(s.discount || 0)}</td><td class="n"><b>${fmt(s.total)}</b></td><td class="n"><button class="b ghost" style="padding:6px 10px" data-bon="${esc(s.no)}">Vezi bon</button></td></tr>`).join("");
+  const showDel = $("#show-deleted").checked;
+  const rows = sales.filter(s => showDel || !s.deleted);
+  $("#hist-body").innerHTML = rows.slice().sort((a,b) => new Date(b.date) - new Date(a.date)).map(s => `<tr${s.deleted ? ' class="deleted"' : ""}><td>${esc(s.no)}${s.deleted ? `<div class="muted">eliminat</div>` : ""}${s.pending ? `<div class="muted">netrimis</div>` : ""}</td><td>${new Date(s.date).toLocaleString("ro-RO")}${s.seller && isAdmin() ? `<div class="muted">${esc(s.seller)}</div>` : ""}</td>
+    <td>${s.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")}</td><td>${esc(s.pay)}</td><td class="n">${s.items.reduce((a,i) => a + i.qty, 0)}${s.items.length > 1 ? `<div class="muted">${s.items.length} poziții</div>` : ""}</td><td class="n">${fmt(s.gross ?? s.total)}</td><td class="n">${fmt(s.discount || 0)}</td><td class="n"><b>${fmt(s.total)}</b></td><td class="n"><button class="b ghost" style="padding:6px 10px" data-bon="${esc(s.no)}">Vezi bon</button>${s.deleted || s.pending ? "" : ` <button class="b red" style="padding:6px 10px" data-del-bon="${esc(s.no)}">Elimină</button>`}</td></tr>`).join("");
   $("#hist-body").querySelectorAll("[data-bon]").forEach(b => b.onclick = () => showReceipt(b.dataset.bon));
-  $("#hist-empty").classList.toggle("hidden", sales.length > 0);
+  $("#hist-body").querySelectorAll("[data-del-bon]").forEach(b => b.onclick = () => deleteSale(b.dataset.delBon));
+  $("#hist-empty").classList.toggle("hidden", rows.length > 0);
 }
+$("#show-deleted").onchange = renderHistory;
 $("#sales-export").onclick = () => download("vanzari.csv", "nr;data;articol;cod de bare;denumire;cantitate;pret;reducere %;pret final;suma fara reducere;suma cu reducere;plata\n" +
-  sales.flatMap(s => s.items.map(i => [s.no, new Date(s.date).toLocaleString("ro-RO"), i.sku||"", i.code, i.name, i.qty, String(i.price).replace(".",","), String(i.disc||0).replace(".",","), String(i.unit).replace(".",","), String(Math.round(i.price*100)*i.qty/100).replace(".",","), String(Math.round(i.unit*100)*i.qty/100).replace(".",","), s.pay].map(csvCell).join(";"))).join("\n"));
+  activeSales().flatMap(s => s.items.map(i => [s.no, new Date(s.date).toLocaleString("ro-RO"), i.sku||"", i.code, i.name, i.qty, String(i.price).replace(".",","), String(i.disc||0).replace(".",","), String(i.unit).replace(".",","), String(Math.round(i.price*100)*i.qty/100).replace(".",","), String(Math.round(i.unit*100)*i.qty/100).replace(".",","), s.pay].map(csvCell).join(";"))).join("\n"));
 
 renderCart(); renderProducts(); renderHistory(); renderReport(); renderCatInfo(); renderUser();
 (async () => {
