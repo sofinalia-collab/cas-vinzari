@@ -180,7 +180,7 @@ td.n,th.n{text-align:right;white-space:nowrap}
       <button class="b ghost" id="sales-export" type="button">Export vânzări CSV</button>
     </div>
     <div class="scroll"><table>
-      <thead><tr><th>Nr.</th><th>Data</th><th>Produse</th><th class="n">Nr. produse</th><th>Plată</th><th class="n">Fără reducere</th><th class="n">Reducere</th><th class="n">Cu reducere</th></tr></thead>
+      <thead><tr><th>Nr.</th><th>Data</th><th>Produse</th><th>Plată</th><th class="n">Nr. produse</th><th class="n">Fără reducere</th><th class="n">Reducere</th><th class="n">Cu reducere</th></tr></thead>
       <tbody id="hist-body"></tbody>
     </table></div>
     <div id="hist-empty" class="empty">Nicio vânzare încă.</div>
@@ -556,7 +556,7 @@ function renderHistory(){
   const g = t.reduce((a,s) => a + Math.round((s.gross ?? s.total)*100), 0) / 100;
   $("#hist-summary").textContent = `Azi: ${t.length} vânzări · fără reducere ${fmt(g)} · reduceri ${fmt(Math.round((g-sum)*100)/100)} · încasat ${fmt(sum)}`;
   $("#hist-body").innerHTML = sales.slice().reverse().map(s => `<tr><td>${s.no}</td><td>${new Date(s.date).toLocaleString("ro-RO")}</td>
-    <td>${s.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")}</td><td class="n">${s.items.reduce((a,i) => a + i.qty, 0)}${s.items.length > 1 ? `<div class="muted">${s.items.length} poziții</div>` : ""}</td><td>${esc(s.pay)}</td><td class="n">${fmt(s.gross ?? s.total)}</td><td class="n">${fmt(s.discount || 0)}</td><td class="n"><b>${fmt(s.total)}</b></td></tr>`).join("");
+    <td>${s.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")}</td><td>${esc(s.pay)}</td><td class="n">${s.items.reduce((a,i) => a + i.qty, 0)}${s.items.length > 1 ? `<div class="muted">${s.items.length} poziții</div>` : ""}</td><td class="n">${fmt(s.gross ?? s.total)}</td><td class="n">${fmt(s.discount || 0)}</td><td class="n"><b>${fmt(s.total)}</b></td></tr>`).join("");
   $("#hist-empty").classList.toggle("hidden", sales.length > 0);
 }
 $("#sales-export").onclick = () => download("vanzari.csv", "nr;data;articol;cod de bare;denumire;cantitate;pret;reducere %;pret final;suma fara reducere;suma cu reducere;plata\n" +
