@@ -862,8 +862,7 @@ function renderReceipt(s){
     <div class="ln"><span>Reducere</span><span>−${fmt(s.discount || 0)}</span></div>
     <hr>
     <div class="ln tot"><span>TOTAL</span><span>${fmt(s.total)}</span></div>
-    <div class="ln"><span>Plată</span><span>${esc(s.pay)}</span></div>
-    <div class="c" style="margin-top:10px">Document intern, nu este bon fiscal</div></div>`;
+    <div class="ln"><span>Plată</span><span>${esc(s.pay)}</span></div></div>`;
   $("#receipt-modal").classList.remove("hidden");
   $("#rc-close").focus();
 }
