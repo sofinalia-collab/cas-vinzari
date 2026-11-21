@@ -369,6 +369,7 @@ async function loadMe(){
 }
 function renderUser(){
   $("#mode-badge").textContent = REMOTE ? "bază centrală" : "PROTOTIP · date de test";
+  $('nav [data-tab="price"]').classList.toggle("hidden", !REMOTE);  // fără bază centrală: ca înainte, fără fila Preț
   const box = $("#user-box");
   if (!REMOTE){ box.innerHTML = ""; }
   else if (me){ box.innerHTML = `<span>${esc(me.name)}${me.role === "admin" ? " · admin" : ""}</span><button class="b" id="logout-btn" type="button">Ieșire</button>`; $("#logout-btn").onclick = logout; }
