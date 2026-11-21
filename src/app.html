@@ -908,14 +908,14 @@ function renderReceipt(s){
 }
 let shownSale = null;
 // ---------- bon trimis ca link ----------
-// Datele bonului stau în partea de după # a adresei: nu ajung la niciun server, doar la cine primește linkul.
+// Datele bonului stau în adresa linkului (?b=…), comprimate; nu se salvează nicăieri pe server.
 const b64u = bytes => { let s = ""; bytes.forEach(b => s += String.fromCharCode(b)); return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); };
 const unb64u = str => { const s = atob(str.replace(/-/g,"+").replace(/_/g,"/")); return Uint8Array.from(s, c => c.charCodeAt(0)); };
 async function pipeBytes(bytes, stream){ return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer()); }
 // Format compact: [nr, timp (secunde, baza 36), plată 0/1, [[denumire, articol, cod, cant., preț în bani, reducere %], ...]].
 // Sumele se recalculează la deschidere, la fel ca în aplicație.
 async function encodeSale(s){
-  const o = [s.no, Math.round(new Date(s.date).getTime()/1000).toString(36), s.pay === "card" ? 1 : 0,
+  const o = [s.no, Math.floor(new Date(s.date).getTime()/1000).toString(36), s.pay === "card" ? 1 : 0,
     s.items.map(i => { const a = [i.name, i.sku || "", i.code, i.qty, Math.round(i.price*100)]; if (i.disc) a.push(i.disc); return a; })];
   const raw = new TextEncoder().encode(JSON.stringify(o));
   if (window.CompressionStream){ try{ return "y" + b64u(await pipeBytes(raw, new CompressionStream("deflate-raw"))); }catch(e){} }
@@ -934,7 +934,19 @@ async function decodeSale(str){
   return {no:o.n, date:o.d, pay:o.p, gross:o.g, discount:o.x, total:o.t,   // linkuri vechi
     items:o.i.map(a => ({name:a[0], sku:a[1], code:a[2], qty:a[3], price:a[4], disc:a[5], unit:a[6]}))};
 }
-async function receiptLink(s){ return location.origin + location.pathname + "#b=" + await encodeSale(s); }
+// Linkul folosește „?b=” (nu „#b=”): unele programe de e-mail și aplicația instalată pe telefon pierd sau ignoră partea de după #.
+async function receiptLink(s){ return location.origin + location.pathname + "?b=" + await encodeSale(s); }
+// Citește codul bonului din adresă: ?b=… (linkuri noi) sau #b=… (linkuri vechi), tolerant la %3D, spații și rânduri rupte.
+function sharedCode(){
+  const q = new URLSearchParams(location.search);
+  let v = q.get("b") || q.get("bon");
+  if (!v){
+    let h = location.hash; try{ h = decodeURIComponent(h); }catch(e){}
+    const m = h.match(/^#(?:b|bon)=(.*)$/s); if (m) v = m[1];
+  }
+  if (v == null) return null;
+  return v.replace(/[^A-Za-z0-9_-]/g, "");
+}
 $("#rc-share").onclick = async () => {
   if (!shownSale) return;
   const url = await receiptLink(shownSale);
@@ -949,14 +961,16 @@ $("#rc-share").onclick = async () => {
 };
 // Deschis din link: arată doar bonul.
 async function openSharedReceipt(){
-  const m = location.hash.match(/^#(?:b|bon)=([xyzj][A-Za-z0-9_-]+)$/);
-  if (!m) return false;
+  const code = sharedCode();
+  if (code == null) return false;
   document.body.classList.add("shared-view");
-  try{ renderReceipt(await decodeSale(m[1])); }
+  try{ if (!/^[xyzj]/.test(code)) throw new Error("cod"); renderReceipt(await decodeSale(code)); }
   catch(e){ $("#receipt").innerHTML = `<div class="rc"><h3>Bonul nu poate fi deschis</h3><div class="c">Linkul este incomplet sau deteriorat.</div></div>`; $("#receipt-modal").classList.remove("hidden"); }
   $("#rc-close").classList.add("hidden"); $("#rc-share").classList.add("hidden");
   return true;
 }
+// Aplicația deja deschisă (ex. instalată pe telefon) primește un link de bon doar ca schimbare a părții de după #.
+window.addEventListener("hashchange", () => { if (sharedCode() != null) location.reload(); });
 const closeReceipt = () => { if (!document.body.classList.contains("shared-view")) $("#receipt-modal").classList.add("hidden"); };
 $("#rc-close").onclick = closeReceipt;
 $("#rc-print").onclick = () => window.print();
