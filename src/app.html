@@ -850,21 +850,29 @@ let shownSale = null;
 const b64u = bytes => { let s = ""; bytes.forEach(b => s += String.fromCharCode(b)); return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); };
 const unb64u = str => { const s = atob(str.replace(/-/g,"+").replace(/_/g,"/")); return Uint8Array.from(s, c => c.charCodeAt(0)); };
 async function pipeBytes(bytes, stream){ return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer()); }
+// Format compact: [nr, timp (secunde, baza 36), plată 0/1, [[denumire, articol, cod, cant., preț în bani, reducere %], ...]].
+// Sumele se recalculează la deschidere, la fel ca în aplicație.
 async function encodeSale(s){
-  const o = {n:s.no, d:s.date, p:s.pay, g:s.gross ?? s.total, x:s.discount || 0, t:s.total,
-    i:s.items.map(i => [i.name, i.sku || "", i.code, i.qty, i.price, i.disc || 0, i.unit ?? i.price])};
+  const o = [s.no, Math.round(new Date(s.date).getTime()/1000).toString(36), s.pay === "card" ? 1 : 0,
+    s.items.map(i => { const a = [i.name, i.sku || "", i.code, i.qty, Math.round(i.price*100)]; if (i.disc) a.push(i.disc); return a; })];
   const raw = new TextEncoder().encode(JSON.stringify(o));
-  if (window.CompressionStream){ try{ return "z" + b64u(await pipeBytes(raw, new CompressionStream("deflate-raw"))); }catch(e){} }
-  return "j" + b64u(raw);
+  if (window.CompressionStream){ try{ return "y" + b64u(await pipeBytes(raw, new CompressionStream("deflate-raw"))); }catch(e){} }
+  return "x" + b64u(raw);
 }
 async function decodeSale(str){
   let bytes = unb64u(str.slice(1));
-  if (str[0] === "z") bytes = await pipeBytes(bytes, new DecompressionStream("deflate-raw"));
+  if (str[0] === "z" || str[0] === "y") bytes = await pipeBytes(bytes, new DecompressionStream("deflate-raw"));
   const o = JSON.parse(new TextDecoder().decode(bytes));
-  return {no:o.n, date:o.d, pay:o.p, gross:o.g, discount:o.x, total:o.t,
+  if (str[0] === "y" || str[0] === "x"){
+    const items = o[3].map(a => { const p = {name:a[0], sku:a[1], code:a[2], qty:a[3], price:a[4]/100, disc:a[5] || 0}; p.unit = finalPrice(p); return p; });
+    const gross = items.reduce((t,i) => t + Math.round(i.price*100)*i.qty, 0) / 100;
+    const total = items.reduce((t,i) => t + Math.round(i.unit*100)*i.qty, 0) / 100;
+    return {no:o[0], date:new Date(parseInt(o[1], 36)*1000).toISOString(), pay:o[2] ? "card" : "numerar", items, gross, total, discount:r2(gross - total)};
+  }
+  return {no:o.n, date:o.d, pay:o.p, gross:o.g, discount:o.x, total:o.t,   // linkuri vechi
     items:o.i.map(a => ({name:a[0], sku:a[1], code:a[2], qty:a[3], price:a[4], disc:a[5], unit:a[6]}))};
 }
-async function receiptLink(s){ return location.origin + location.pathname + "#bon=" + await encodeSale(s); }
+async function receiptLink(s){ return location.origin + location.pathname + "#b=" + await encodeSale(s); }
 $("#rc-share").onclick = async () => {
   if (!shownSale) return;
   const url = await receiptLink(shownSale);
@@ -879,7 +887,7 @@ $("#rc-share").onclick = async () => {
 };
 // Deschis din link: arată doar bonul.
 async function openSharedReceipt(){
-  const m = location.hash.match(/^#bon=([zj][A-Za-z0-9_-]+)$/);
+  const m = location.hash.match(/^#(?:b|bon)=([xyzj][A-Za-z0-9_-]+)$/);
   if (!m) return false;
   document.body.classList.add("shared-view");
   try{ renderReceipt(await decodeSale(m[1])); }
