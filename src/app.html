@@ -16,6 +16,11 @@
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 header{position:sticky;top:0;z-index:5;background:var(--acc);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:12px}
+header .b{padding:6px 10px;font-size:14px;background:rgba(255,255,255,.18)}
+#user-box{color:#fff;font-size:14px}
+.pr-name{font-size:22px;font-weight:700;margin-bottom:4px}
+.pr-price{font-size:40px;font-weight:800;color:var(--acc);margin-top:10px}
+.pr-old{font-size:18px;color:var(--muted)}
 header h1{font-size:18px;margin:0;flex:1}
 .badge{font-size:12px;background:rgba(255,255,255,.2);padding:2px 8px;border-radius:99px}
 nav{display:flex;background:var(--card);border-bottom:1px solid var(--line)}
@@ -78,22 +83,47 @@ td.n,th.n{text-align:right;white-space:nowrap}
 </style>
 </head>
 <body>
-<header><h1>Casa de vânzări</h1><span class="badge" id="mode-badge">PROTOTIP · date de test</span></header>
+<header><h1>Casa de vânzări</h1><span class="badge" id="mode-badge">PROTOTIP · date de test</span><span id="user-box" class="row" style="gap:8px"></span></header>
 <nav>
-  <button data-tab="sell" class="on">Vânzare</button>
-  <button data-tab="products">Produse</button>
-  <button data-tab="report">Raport zilnic</button>
-  <button data-tab="history">Istoric</button>
+  <button data-tab="price">Preț</button>
+  <button data-tab="sell" data-auth="1">Vânzare</button>
+  <button data-tab="products" data-admin="1">Produse</button>
+  <button data-tab="report" data-auth="1">Raport</button>
+  <button data-tab="history" data-auth="1">Istoric</button>
 </nav>
 <main>
 
-<!-- VÂNZARE -->
-<section id="tab-sell" class="grid">
+<!-- VERIFICARE PREȚ (fără login) -->
+<section id="tab-price" class="grid hidden">
+  <div id="price-slot"></div>
   <div class="card">
-    <h2>Scanează produsul</h2>
+    <h2>Preț</h2>
+    <div id="price-result" class="empty">Scanează un produs ca să vezi denumirea, articolul și prețul.</div>
+    <div class="muted" id="cat-info" style="margin-top:10px"></div>
+  </div>
+</section>
+
+<!-- INTRARE -->
+<section id="tab-login" class="hidden">
+  <div class="card" style="max-width:420px;margin:0 auto">
+    <h2>Intrare pentru vânzări</h2>
+    <form id="login-form" class="grid" style="gap:10px" autocomplete="on">
+      <input id="login-user" autocomplete="username" autocapitalize="none" placeholder="Utilizator" required>
+      <input id="login-pass" type="password" autocomplete="current-password" placeholder="Parolă" required>
+      <button class="b big" type="submit" id="login-btn">Intră</button>
+    </form>
+    <div id="login-msg" class="msg"></div>
+  </div>
+</section>
+
+<!-- VÂNZARE -->
+<section id="tab-sell" class="grid hidden">
+  <div id="sell-slot">
+  <div class="card" id="scan-card">
+    <h2 id="scan-title">Scanează produsul</h2>
     <form id="scan-form" class="row" autocomplete="off">
       <input id="scan-input" inputmode="numeric" placeholder="Cod de bare sau nume (scanerul USB scrie aici)" autofocus>
-      <button class="b" type="submit">Adaugă</button>
+      <button class="b" type="submit" id="scan-btn">Adaugă</button>
     </form>
     <div class="row" style="margin-top:10px">
       <button class="b ghost" id="cam-btn" type="button" style="flex:1">📷 Scanează cu camera</button>
@@ -105,6 +135,7 @@ td.n,th.n{text-align:right;white-space:nowrap}
     </details>
     <div id="scan-msg" class="msg"></div>
     <div id="search-results" class="found"></div>
+  </div>
   </div>
 
   <div class="card">
@@ -145,11 +176,13 @@ td.n,th.n{text-align:right;white-space:nowrap}
       <button class="b" type="submit">Salvează</button>
     </form>
     <p class="muted">Import nomenclator din <b>Excel (.xlsx, .xls)</b> sau CSV, prima foaie. Coloane: <b>Articol, Denumire, Cod de bare, Preț, Reducere (%)</b>. Se recunosc după antet (și în rusă: Артикул, Наименование, Штрихкод, Цена, Скидка), în orice ordine. Fără antet se ia ordinea de mai sus. Un cod care există deja se actualizează.</p>
+    <p class="muted hidden" id="central-note"><b>Baza centrală:</b> nomenclatorul încărcat aici ajunge imediat pe toate telefoanele (la pornire sau la „Reîncarcă”).</p>
     <div class="row" style="flex-wrap:wrap">
       <input type="file" id="csv-file" accept=".xlsx,.xls,.csv" style="flex:1;min-width:200px">
       <label class="muted" style="display:flex;gap:6px;align-items:center;white-space:nowrap"><input type="checkbox" id="csv-replace" checked style="width:auto"> Înlocuiește tot catalogul</label>
       <button class="b ghost" id="csv-export" type="button">Export produse CSV</button>
       <button class="b red" id="reset-demo" type="button">Repune datele de test</button>
+      <button class="b ghost hidden" id="cat-refresh" type="button">Reîncarcă din baza centrală</button>
     </div>
     <div id="prod-msg" class="msg"></div>
   </div>
@@ -217,6 +250,8 @@ td.n,th.n{text-align:right;white-space:nowrap}
 
 <script>/*ZXING*/</script>
 <script>/*XLSX*/</script>
+<script src="vendor/supabase-js-2.118.0.min.js"></script>
+<script src="config.js"></script>
 <script>
 "use strict";
 // ---------- stocare locală (în prototip; în versiunea reală: server / 1C / Google Sheets) ----------
@@ -234,23 +269,153 @@ const DEMO = [
 ];
 // Reducerea = procent (presupunere, de confirmat). Prețul final se rotunjește la 2 zecimale.
 const finalPrice = p => Math.round(p.price * (100 - (p.disc || 0))) / 100;
-let products = store.get("pos.products2", null) || DEMO.slice();
-let sales = store.get("pos.sales", []);
+// ---------- mod: local (prototip) sau central (Supabase, configurat în config.js) ----------
+const CFG = window.CASA_CONFIG || {};
+const REMOTE = !!(CFG.supabaseUrl && CFG.supabaseAnonKey && window.supabase);
+const sb = REMOTE ? supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey) : null;
+const LOGIN_DOMAIN = CFG.loginDomain || "vanzari.local";   // „ana” → ana@vanzari.local
+let me = null;   // vânzătorul logat: {id, name, role}
+let products = REMOTE ? store.get("pos.cache.products", []) : (store.get("pos.products2", null) || DEMO.slice());
+let sales = REMOTE ? [] : store.get("pos.sales", []);
 let cart = [];
+let currentTab = "price";
 const $ = s => document.querySelector(s);
 const fmt = n => n.toLocaleString("ro-RO",{minimumFractionDigits:2,maximumFractionDigits:2});
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const saveProducts = () => store.set("pos.products2", products);
-const saveSales = () => store.set("pos.sales", sales);
+const saveProducts = () => store.set(REMOTE ? "pos.cache.products" : "pos.products2", products);
+const saveSales = () => { if (!REMOTE) store.set("pos.sales", sales); };
+const isAdmin = () => !REMOTE || (me && me.role === "admin");
+const isNetErr = e => /fetch|network|load failed|timeout|offline/i.test(String(e && (e.message || e)));
+
+// ---------- baza centrală ----------
+async function fetchAll(q){ // PostgREST dă maxim 1000 rânduri pe cerere
+  const all = [];
+  for (let from = 0; ; from += 1000){
+    const {data, error} = await q().range(from, from + 999);
+    if (error) throw error;
+    all.push(...data);
+    if (data.length < 1000) break;
+  }
+  return all;
+}
+async function loadProductsRemote(){
+  const rows = await fetchAll(() => sb.from("products").select("code,sku,name,price,disc").order("code"));
+  products = rows.map(p => ({code:p.code, sku:p.sku || "", name:p.name, price:+p.price, disc:+p.disc}));
+  saveProducts(); store.set("pos.cache.time", Date.now());
+}
+async function refreshCatalog(silent){
+  if (!REMOTE) return;
+  try{ await loadProductsRemote(); }
+  catch(e){ if (!silent) toast("Nomenclatorul nu s-a putut actualiza: " + (isNetErr(e) ? "fără internet" : e.message) + ". Se folosește ultima copie."); }
+  renderCatInfo(); renderProducts();
+}
+function renderCatInfo(){
+  const t = store.get("pos.cache.time", 0);
+  $("#cat-info").textContent = REMOTE
+    ? `Nomenclator: ${products.length} produse` + (t ? ` · actualizat ${new Date(t).toLocaleString("ro-RO")}` : " · neîncărcat încă")
+    : `Nomenclator local (prototip): ${products.length} produse`;
+}
+const mapSale = r => ({no:r.id, date:r.created_at, pay:r.pay, items:r.items, gross:+r.gross, discount:+r.discount, total:+r.total, seller:r.seller_name || ""});
+const pendingList = () => store.get("pos.pending", []);
+async function loadSalesRemote(){
+  const pend = pendingList().map(x => ({...x, pending:true, seller:me ? me.name : ""}));
+  if (!me){ sales = []; return; }
+  try{
+    const since = new Date(Date.now() - 90*864e5).toISOString();
+    const rows = await fetchAll(() => sb.from("sales").select("*").gte("created_at", since).order("id"));
+    sales = rows.map(mapSale).concat(pend);
+  }catch(e){ sales = sales.filter(x => !x.pending).concat(pend); if (!isNetErr(e)) toast("Vânzările nu s-au putut citi: " + e.message); }
+}
+async function insertSale(sale){
+  const {data, error} = await sb.from("sales").insert({pay:sale.pay, gross:sale.gross, discount:sale.discount, total:sale.total, items:sale.items, created_at:sale.date}).select().single();
+  if (error) throw error;
+  return mapSale(data);
+}
+let flushing = false;
+async function flushPending(){
+  if (!REMOTE || !me || flushing) return;
+  const list = pendingList(); if (!list.length) return;
+  flushing = true;
+  try{
+    for (const p of list){
+      try{
+        const saved = await insertSale(p);
+        store.set("pos.pending", pendingList().filter(x => x.no !== p.no));
+        const i = sales.findIndex(x => x.no === p.no); if (i >= 0) sales[i] = saved; else sales.push(saved);
+      }catch(e){ if (isNetErr(e)) break; toast("Vânzarea " + p.no + " nu a fost primită: " + e.message); break; }
+    }
+  } finally { flushing = false; }
+  renderHistory(); renderReport();
+}
+
+// ---------- utilizator ----------
+async function loadMe(){
+  me = null;
+  const {data:{session}} = await sb.auth.getSession();
+  if (!session) return;
+  const {data, error} = await sb.from("profiles").select("id,name,role,active").eq("id", session.user.id).maybeSingle();
+  if (error){ if (isNetErr(error)) me = store.get("pos.me", null); return; }
+  if (data && data.active){ me = data; store.set("pos.me", me); }
+  else { await sb.auth.signOut(); store.set("pos.me", null); }
+}
+function renderUser(){
+  $("#mode-badge").textContent = REMOTE ? "bază centrală" : "PROTOTIP · date de test";
+  const box = $("#user-box");
+  if (!REMOTE){ box.innerHTML = ""; }
+  else if (me){ box.innerHTML = `<span>${esc(me.name)}${me.role === "admin" ? " · admin" : ""}</span><button class="b" id="logout-btn" type="button">Ieșire</button>`; $("#logout-btn").onclick = logout; }
+  else { box.innerHTML = `<button class="b" id="login-open" type="button">Intră</button>`; $("#login-open").onclick = () => showTab("sell"); }
+  document.querySelectorAll("nav [data-admin]").forEach(b => b.classList.toggle("hidden", REMOTE && !isAdmin()));
+  $("#reset-demo").classList.toggle("hidden", REMOTE);
+  $("#cat-refresh").classList.toggle("hidden", !REMOTE);
+  $("#central-note").classList.toggle("hidden", !REMOTE);
+}
+let wantedTab = "sell";
+$("#login-form").onsubmit = async e => {
+  e.preventDefault();
+  const u = $("#login-user").value.trim(), pw = $("#login-pass").value;
+  const email = u.includes("@") ? u : u.toLowerCase() + "@" + LOGIN_DOMAIN;
+  $("#login-btn").disabled = true; msg($("#login-msg"), "Se verifică…", true);
+  try{
+    const {error} = await sb.auth.signInWithPassword({email, password:pw});
+    if (error) throw error;
+    await loadMe();
+    if (!me) throw new Error("Contul nu este activ. Cere administratorului să-l activeze.");
+    $("#login-pass").value = ""; $("#login-msg").className = "msg";
+    renderUser(); await loadSalesRemote(); flushPending();
+    showTab(wantedTab === "products" && !isAdmin() ? "sell" : wantedTab);
+  }catch(err){
+    const m = String(err.message || err);
+    msg($("#login-msg"), /invalid login|credentials/i.test(m) ? "Utilizator sau parolă greșită." : isNetErr(err) ? "Fără internet. Încearcă din nou." : m, false);
+  } finally { $("#login-btn").disabled = false; }
+};
+async function logout(){
+  if (pendingList().length && !confirm("Sunt vânzări netrimise pe acest dispozitiv. Ieși oricum? Ele rămân salvate aici și se trimit la următoarea intrare.")) return;
+  try{ await sb.auth.signOut(); }catch(e){}
+  me = null; store.set("pos.me", null); sales = []; cart = []; renderCart();
+  renderUser(); showTab("price");
+}
 
 // ---------- tab-uri ----------
-document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
-  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x === b));
-  ["sell","products","report","history"].forEach(t => $("#tab-"+t).classList.toggle("hidden", t !== b.dataset.tab));
-  if (b.dataset.tab !== "sell") stopCam();
-  if (b.dataset.tab === "sell") $("#scan-input").focus();
+const TABS = ["price","login","sell","products","report","history"];
+function showTab(tab){
+  const btn = document.querySelector(`nav button[data-tab="${tab}"]`);
+  if (REMOTE && btn && (btn.dataset.auth || btn.dataset.admin) && !me){ wantedTab = tab; tab = "login"; }
+  else if (REMOTE && btn && btn.dataset.admin && !isAdmin()) tab = "sell";
+  currentTab = tab;
+  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x.dataset.tab === tab || (tab === "login" && x.dataset.tab === wantedTab)));
+  TABS.forEach(t => $("#tab-"+t).classList.toggle("hidden", t !== tab));
+  if (tab === "price" || tab === "sell"){
+    $("#" + tab + "-slot").appendChild($("#scan-card"));
+    $("#scan-title").textContent = tab === "price" ? "Verificare preț" : "Scanează produsul";
+    $("#scan-btn").textContent = tab === "price" ? "Caută" : "Adaugă";
+    $("#scan-input").placeholder = tab === "price" ? "Scanează sau scrie codul / articolul" : "Cod de bare sau nume (scanerul USB scrie aici)";
+    $("#scan-input").focus();
+  } else stopCam();
+  if (tab === "login") setTimeout(() => $("#login-user").focus(), 0);
   renderProducts(); renderHistory(); renderReport();
-});
+}
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
+const scanActive = () => currentTab === "sell" || currentTab === "price";
 
 // ---------- mesaje + sunet ----------
 function msg(el, text, ok){ el.textContent = text; el.className = "msg " + (ok ? "ok" : "err"); }
@@ -273,21 +438,31 @@ function addToCart(p){
   renderCart();
   msg($("#scan-msg"), "✓ " + p.name + " · " + fmt(finalPrice(p)) + (p.disc ? " (reducere " + p.disc + "%)" : ""), true);
 }
+function showPrice(p){
+  $("#scan-msg").className = "msg";
+  $("#price-result").className = "";
+  $("#price-result").style.textAlign = "center";
+  $("#price-result").innerHTML = `<div class="pr-name">${esc(p.name)}</div>
+    <div class="muted">Articol: <b>${esc(p.sku || "—")}</b> · Cod de bare: ${esc(p.code)}</div>
+    ${p.disc ? `<div class="pr-old" style="margin-top:10px"><s>${fmt(p.price)}</s> · reducere ${p.disc}%</div>` : ""}
+    <div class="pr-price">${fmt(finalPrice(p))}</div>`;
+}
 function handleCode(raw){
   const q = raw.trim(); $("#search-results").innerHTML = "";
   if (!q) return;
   const p = findByCode(q);
   const ps = p || findBySku(q);
-  if (ps){ beep(true); addToCart(ps); return; }
+  if (ps){ beep(true); currentTab === "price" ? showPrice(ps) : addToCart(ps); return; }
   // nu e cod exact: căutare după nume
   const hits = products.filter(x => x.name.toLowerCase().includes(q.toLowerCase()) || x.code.includes(q) || (x.sku||"").toLowerCase() === q.toLowerCase()).slice(0,8);
   if (hits.length){
     msg($("#scan-msg"), "Alege produsul:", true);
     $("#search-results").innerHTML = hits.map(h => `<div data-code="${esc(h.code)}">${esc(h.name)} <span class="muted">· art. ${esc(h.sku||"—")} · ${esc(h.code)} · ${fmt(finalPrice(h))}</span></div>`).join("");
-    $("#search-results").querySelectorAll("div").forEach(d => d.onclick = () => { addToCart(findByCode(d.dataset.code)); $("#search-results").innerHTML=""; $("#scan-input").focus(); });
+    $("#search-results").querySelectorAll("div").forEach(d => d.onclick = () => { const f = findByCode(d.dataset.code); currentTab === "price" ? showPrice(f) : addToCart(f); $("#search-results").innerHTML=""; $("#scan-input").focus(); });
   } else {
     beep(false);
-    msg($("#scan-msg"), "Codul „" + q + "” nu există în catalog. Adaugă-l în fila Produse.", false);
+    if (currentTab === "price") $("#price-result").innerHTML = `<div class="empty">Produsul cu codul „${esc(q)}” nu există în nomenclator.</div>`;
+    msg($("#scan-msg"), "Codul „" + q + "” nu există în nomenclator." + (isAdmin() ? " Adaugă-l în fila Produse." : ""), false);
   }
 }
 $("#scan-form").onsubmit = e => { e.preventDefault(); submitScan(); };
@@ -317,12 +492,12 @@ document.addEventListener("keydown", e => {
   if (isSpecialPrefix(e)){
     e.preventDefault();
     logKey(e, "ignorat");
-    if (!$("#tab-sell").classList.contains("hidden")){ kbBuf = ""; $("#scan-input").focus(); }
+    if (scanActive()){ kbBuf = ""; $("#scan-input").focus(); }
     return;
   }
   if (e.key === "Alt"){ e.preventDefault(); logKey(e, "ignorat"); return; }
   // Alt ținut apăsat în timpul codului (fără Ctrl, deci nu AltGr): browserul n-ar scrie cifra, o scriem noi.
-  if (e.altKey && !e.ctrlKey && e.key.length === 1 && !$("#tab-sell").classList.contains("hidden")){
+  if (e.altKey && !e.ctrlKey && e.key.length === 1 && scanActive()){
     e.preventDefault(); logKey(e, "fără Alt");
     const inp = $("#scan-input"); inp.focus(); inp.value += e.key; inp.dispatchEvent(new Event("input"));
     return;
@@ -334,7 +509,7 @@ document.addEventListener("keyup", e => { if (e.key === "Alt" || /^F\d{1,2}$/.te
 // Dacă focusul nu e în câmp (ex. după un clic), prindem totuși scanarea de la tastatură.
 let kbBuf = "", kbLast = 0;
 document.addEventListener("keydown", e => {
-  if ($("#tab-sell").classList.contains("hidden")) return;
+  if (!scanActive() || !$("#receipt-modal").classList.contains("hidden")) return;
   const t = e.target;
   if (t === $("#scan-input") || ["INPUT","SELECT","TEXTAREA"].includes(t.tagName)) return;
   const now = Date.now();
@@ -344,7 +519,7 @@ document.addEventListener("keydown", e => {
   if (e.key.length === 1){ kbBuf += e.key; if (kbBuf.length >= 6 && findByCode(kbBuf)){ clearTimeout(autoT); const c = kbBuf; autoT = setTimeout(() => { if (kbBuf === c){ handleCode(c); kbBuf = ""; } }, 350); } }
 });
 // clic oriunde în fila Vânzare readuce focusul în câmpul de scanare
-$("#tab-sell").addEventListener("click", e => { if (!e.target.closest("input,select,button,#search-results")) $("#scan-input").focus(); });
+["#tab-sell","#tab-price"].forEach(id => $(id).addEventListener("click", e => { if (!e.target.closest("input,select,button,a,#search-results")) $("#scan-input").focus(); }));
 
 function cartTotals(){
   const gross = cart.reduce((s,l) => s + Math.round(l.price*100)*l.qty, 0) / 100;
@@ -369,15 +544,35 @@ function renderCart(){
   $("#cart-pay").disabled = !cart.length;
 }
 $("#cart-clear").onclick = () => { cart = []; renderCart(); $("#scan-msg").className = "msg"; };
-$("#cart-pay").onclick = () => {
+$("#cart-pay").onclick = async () => {
   if (!cart.length) return;
-  const total = cart.reduce((s,l) => s + Math.round(l.unit*100)*l.qty, 0) / 100;
-  const no = (sales.reduce((m,s) => Math.max(m, s.no), 0)) + 1;
-  sales.push({no, date:new Date().toISOString(), pay:$("#pay-method").value, items:cart.map(l => ({...l})), gross:cartTotals().gross, discount:cartTotals().disc, total});
-  saveSales();
-  cart = []; renderCart();
-  msg($("#scan-msg"), "Vânzarea nr. " + no + " a fost înregistrată · " + fmt(total), true);
-  beep(true); $("#scan-input").focus();
+  const t = cartTotals();
+  const sale = {date:new Date().toISOString(), pay:$("#pay-method").value, items:cart.map(l => ({...l})), gross:t.gross, discount:t.disc, total:t.total};
+  if (!REMOTE){
+    sale.no = (sales.reduce((m,s) => Math.max(m, +s.no || 0), 0)) + 1;
+    sales.push(sale); saveSales();
+    cart = []; renderCart();
+    msg($("#scan-msg"), "Vânzarea nr. " + sale.no + " a fost înregistrată · " + fmt(sale.total), true);
+    beep(true); $("#scan-input").focus(); return;
+  }
+  $("#cart-pay").disabled = true;
+  try{
+    const saved = await insertSale(sale);
+    sales.push(saved); cart = []; renderCart();
+    msg($("#scan-msg"), "Vânzarea nr. " + saved.no + " a fost înregistrată · " + fmt(saved.total), true); beep(true);
+  }catch(e){
+    if (isNetErr(e)){
+      const n = store.get("pos.pendingSeq", 0) + 1; store.set("pos.pendingSeq", n);
+      sale.no = "L" + n;
+      store.set("pos.pending", pendingList().concat([sale]));
+      sales.push({...sale, pending:true, seller:me ? me.name : ""}); cart = []; renderCart();
+      msg($("#scan-msg"), "Fără internet: vânzarea e salvată pe telefon (" + sale.no + ") și se trimite automat când revine conexiunea · " + fmt(sale.total), true); beep(true);
+    } else {
+      msg($("#scan-msg"), "Vânzarea NU a fost înregistrată: " + e.message, false); beep(false);
+      renderCart();
+    }
+  }
+  $("#scan-input").focus();
 };
 
 // ---------- camera ----------
@@ -436,12 +631,23 @@ function renderProducts(){
   $("#prod-count").textContent = products.length;
   $("#prod-body").innerHTML = list.map(p => `<tr><td>${esc(p.sku||"")}</td><td>${esc(p.code)}</td><td>${esc(p.name)}</td><td class="n">${fmt(p.price)}</td><td class="n">${p.disc ? p.disc + "%" : "—"}</td><td class="n">${fmt(finalPrice(p))}</td>
     <td class="n"><button class="b red" style="padding:4px 8px" data-pdel="${esc(p.code)}">✕</button></td></tr>`).join("");
-  $("#prod-body").querySelectorAll("[data-pdel]").forEach(b => b.onclick = () => { products = products.filter(p => p.code !== b.dataset.pdel); saveProducts(); renderProducts(); });
+  $("#prod-body").querySelectorAll("[data-pdel]").forEach(b => b.onclick = async () => {
+    const code = b.dataset.pdel;
+    if (REMOTE){
+      const {error} = await sb.from("products").delete().eq("code", code);
+      if (error){ msg($("#prod-msg"), "Nu s-a șters: " + error.message, false); return; }
+    }
+    products = products.filter(p => p.code !== code); saveProducts(); renderProducts();
+  });
 }
 $("#prod-filter").oninput = renderProducts;
-$("#prod-form").onsubmit = e => {
+$("#prod-form").onsubmit = async e => {
   e.preventDefault();
   const p = {sku:$("#p-sku").value.trim(), code:$("#p-code").value.trim(), name:$("#p-name").value.trim(), price:parseFloat($("#p-price").value), disc:parseFloat($("#p-disc").value) || 0};
+  if (REMOTE){
+    const {error} = await sb.rpc("load_products", {items:[p], replace:false});
+    if (error){ msg($("#prod-msg"), "Nu s-a salvat: " + error.message, false); return; }
+  }
   const i = products.findIndex(x => x.code === p.code);
   if (i >= 0) products[i] = p; else products.push(p);
   saveProducts(); renderProducts(); e.target.reset();
@@ -492,6 +698,17 @@ $("#csv-file").onchange = async e => {
   try{
     const {items, headerFound} = rowsToProducts(await readFileRows(file));
     if (!items.length) throw new Error("nu am găsit produse (verifică coloanele Cod de bare și Denumire)");
+    if (REMOTE){
+      const uniq = new Map(); let noPriceR = 0;
+      items.forEach(r => { if (r.price === null){ noPriceR++; r.price = 0; } uniq.set(r.code, r); });
+      const list = [...uniq.values()], dup = items.length - list.length;
+      msg($("#prod-msg"), `Se încarcă ${list.length} produse în baza centrală…`, true);
+      const {data, error} = await sb.rpc("load_products", {items:list, replace:$("#csv-replace").checked});
+      if (error) throw error;
+      await loadProductsRemote(); renderProducts(); renderCatInfo();
+      msg($("#prod-msg"), `Import „${file.name}”: ${data} produse încărcate în baza centrală` + (dup ? `, ${dup} coduri duplicate în fișier (s-a păstrat ultimul rând)` : "") + (noPriceR ? `, ${noPriceR} fără preț (pus 0, de verificat)` : "") + (headerFound ? "." : ". Antet nerecunoscut: s-a folosit ordinea articol, denumire, cod de bare, preț, reducere."), !noPriceR);
+      e.target.value = ""; return;
+    }
     if ($("#csv-replace").checked) products = [];
     let added = 0, updated = 0, noPrice = 0;
     items.forEach(r => { if (r.price === null){ noPrice++; r.price = 0; }
@@ -517,6 +734,7 @@ async function saveFile(name, blob){
 function download(name, text){ saveFile(name, new Blob(["\uFEFF" + text], {type:"text/csv;charset=utf-8"})); }
 const csvCell = v => /[;"\n]/.test(String(v)) ? '"' + String(v).replace(/"/g,'""') + '"' : String(v);
 $("#csv-export").onclick = () => download("produse.csv", "articol;denumire;cod de bare;pret;reducere\n" + products.map(p => [p.sku||"",p.name,p.code,String(p.price).replace(".",","),String(p.disc||0).replace(".",",")].map(csvCell).join(";")).join("\n"));
+$("#cat-refresh").onclick = async () => { await refreshCatalog(false); msg($("#prod-msg"), `Nomenclator reîncărcat: ${products.length} produse.`, true); };
 $("#reset-demo").onclick = () => { products = DEMO.map(p => ({...p})); saveProducts(); renderProducts(); msg($("#prod-msg"), "Catalogul de test a fost repus.", true); };
 
 // ---------- raport zilnic ----------
@@ -577,7 +795,7 @@ $("#rep-xlsx").onclick = () => {
 
 // ---------- vizualizare bon ----------
 function showReceipt(no){
-  const s = sales.find(x => x.no === no); if (!s) return;
+  const s = sales.find(x => String(x.no) === String(no)); if (!s) return;
   const items = s.items.map(i => {
     const unit = i.unit ?? i.price, gross = Math.round(i.price*100)*i.qty/100, net = Math.round(unit*100)*i.qty/100;
     return `<div class="it"><div>${esc(i.name)}</div>
@@ -588,8 +806,8 @@ function showReceipt(no){
   }).join("");
   const qty = s.items.reduce((a,i) => a + i.qty, 0);
   $("#receipt").innerHTML = `<div class="rc">
-    <h3 id="rc-title">Bon nr. ${s.no}</h3>
-    <div class="c">${new Date(s.date).toLocaleString("ro-RO")}</div>
+    <h3 id="rc-title">Bon nr. ${esc(s.no)}${s.pending ? " (netrimis)" : ""}</h3>
+    <div class="c">${new Date(s.date).toLocaleString("ro-RO")}${s.seller ? " · " + esc(s.seller) : ""}</div>
     <hr>${items}<hr>
     <div class="ln"><span>Produse</span><span>${qty} buc. (${s.items.length} poziții)</span></div>
     <div class="ln"><span>Sumă fără reducere</span><span>${fmt(s.gross ?? s.total)}</span></div>
@@ -614,15 +832,25 @@ function renderHistory(){
   const sum = t.reduce((a,s) => a + Math.round(s.total*100), 0) / 100;
   const g = t.reduce((a,s) => a + Math.round((s.gross ?? s.total)*100), 0) / 100;
   $("#hist-summary").textContent = `Azi: ${t.length} vânzări · fără reducere ${fmt(g)} · reduceri ${fmt(Math.round((g-sum)*100)/100)} · încasat ${fmt(sum)}`;
-  $("#hist-body").innerHTML = sales.slice().reverse().map(s => `<tr><td>${s.no}</td><td>${new Date(s.date).toLocaleString("ro-RO")}</td>
-    <td>${s.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")}</td><td>${esc(s.pay)}</td><td class="n">${s.items.reduce((a,i) => a + i.qty, 0)}${s.items.length > 1 ? `<div class="muted">${s.items.length} poziții</div>` : ""}</td><td class="n">${fmt(s.gross ?? s.total)}</td><td class="n">${fmt(s.discount || 0)}</td><td class="n"><b>${fmt(s.total)}</b></td><td class="n"><button class="b ghost" style="padding:6px 10px" data-bon="${s.no}">Vezi bon</button></td></tr>`).join("");
-  $("#hist-body").querySelectorAll("[data-bon]").forEach(b => b.onclick = () => showReceipt(+b.dataset.bon));
+  $("#hist-body").innerHTML = sales.slice().sort((a,b) => new Date(b.date) - new Date(a.date)).map(s => `<tr><td>${esc(s.no)}${s.pending ? `<div class="muted">netrimis</div>` : ""}</td><td>${new Date(s.date).toLocaleString("ro-RO")}${s.seller && isAdmin() ? `<div class="muted">${esc(s.seller)}</div>` : ""}</td>
+    <td>${s.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")}</td><td>${esc(s.pay)}</td><td class="n">${s.items.reduce((a,i) => a + i.qty, 0)}${s.items.length > 1 ? `<div class="muted">${s.items.length} poziții</div>` : ""}</td><td class="n">${fmt(s.gross ?? s.total)}</td><td class="n">${fmt(s.discount || 0)}</td><td class="n"><b>${fmt(s.total)}</b></td><td class="n"><button class="b ghost" style="padding:6px 10px" data-bon="${esc(s.no)}">Vezi bon</button></td></tr>`).join("");
+  $("#hist-body").querySelectorAll("[data-bon]").forEach(b => b.onclick = () => showReceipt(b.dataset.bon));
   $("#hist-empty").classList.toggle("hidden", sales.length > 0);
 }
 $("#sales-export").onclick = () => download("vanzari.csv", "nr;data;articol;cod de bare;denumire;cantitate;pret;reducere %;pret final;suma fara reducere;suma cu reducere;plata\n" +
   sales.flatMap(s => s.items.map(i => [s.no, new Date(s.date).toLocaleString("ro-RO"), i.sku||"", i.code, i.name, i.qty, String(i.price).replace(".",","), String(i.disc||0).replace(".",","), String(i.unit).replace(".",","), String(Math.round(i.price*100)*i.qty/100).replace(".",","), String(Math.round(i.unit*100)*i.qty/100).replace(".",","), s.pay].map(csvCell).join(";"))).join("\n"));
 
-renderCart(); renderProducts(); renderHistory(); renderReport();
+renderCart(); renderProducts(); renderHistory(); renderReport(); renderCatInfo(); renderUser();
+(async () => {
+  if (!REMOTE){ showTab("sell"); return; }
+  showTab("price");
+  await loadMe(); renderUser();
+  refreshCatalog(true);
+  if (me){ await loadSalesRemote(); flushPending(); renderHistory(); renderReport(); }
+  setInterval(() => { if (document.visibilityState === "visible") refreshCatalog(true); }, 5*60*1000);
+  setInterval(flushPending, 30*1000);
+  window.addEventListener("online", flushPending);
+})();
 </script>
 </body>
 </html>
