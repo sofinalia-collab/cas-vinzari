@@ -116,6 +116,15 @@ td.n,th.n{text-align:right;white-space:nowrap}
   </div>
 </section>
 
+<!-- FĂRĂ DREPT DE ADMIN -->
+<section id="tab-noadmin" class="hidden">
+  <div class="card" style="max-width:520px;margin:0 auto">
+    <h2>Produse: doar pentru administrator</h2>
+    <p>Ești logat ca <b id="na-user"></b>, cu rolul <b id="na-role"></b>. Încărcarea nomenclatorului o poate face doar contul cu rolul <b>admin</b>.</p>
+    <p class="muted">Ca să devii administrator: în Supabase deschide Table Editor, apoi tabelul <b>profiles</b>. La rândul tău schimbă <b>role</b> din <code>seller</code> în <code>admin</code> și salvează. Apoi apasă <b>Ieșire</b> și intră din nou.</p>
+  </div>
+</section>
+
 <!-- VÂNZARE -->
 <section id="tab-sell" class="grid hidden">
   <div id="sell-slot">
@@ -386,7 +395,6 @@ function renderUser(){
   if (!REMOTE){ box.innerHTML = ""; }
   else if (me){ box.innerHTML = `<span>${esc(me.name)}${me.role === "admin" ? " · admin" : ""}</span><button class="b" id="logout-btn" type="button">Ieșire</button>`; $("#logout-btn").onclick = logout; }
   else { box.innerHTML = `<button class="b" id="login-open" type="button">Intră</button>`; $("#login-open").onclick = () => showTab("sell"); }
-  document.querySelectorAll("nav [data-admin]").forEach(b => b.classList.toggle("hidden", REMOTE && !isAdmin()));
   $("#reset-demo").classList.toggle("hidden", REMOTE);
   $("#cat-refresh").classList.toggle("hidden", !REMOTE);
   $("#central-note").classList.toggle("hidden", !REMOTE);
@@ -404,7 +412,7 @@ $("#login-form").onsubmit = async e => {
     if (!me) throw new Error("Contul nu este activ. Cere administratorului să-l activeze.");
     $("#login-pass").value = ""; $("#login-msg").className = "msg";
     renderUser(); await loadSalesRemote(); flushPending();
-    showTab(wantedTab === "products" && !isAdmin() ? "sell" : wantedTab);
+    showTab(wantedTab);
   }catch(err){
     const m = String(err.message || err);
     msg($("#login-msg"), /invalid login|credentials/i.test(m) ? "Utilizator sau parolă greșită." : isNetErr(err) ? "Fără internet. Încearcă din nou." : m, false);
@@ -418,11 +426,17 @@ async function logout(){
 }
 
 // ---------- tab-uri ----------
-const TABS = ["price","login","sell","products","report","history"];
+const TABS = ["price","login","noadmin","sell","products","report","history"];
 function showTab(tab){
   const btn = document.querySelector(`nav button[data-tab="${tab}"]`);
   if (REMOTE && btn && (btn.dataset.auth || btn.dataset.admin) && !me){ wantedTab = tab; tab = "login"; }
-  else if (REMOTE && btn && btn.dataset.admin && !isAdmin()) tab = "sell";
+  else if (REMOTE && btn && btn.dataset.admin && !isAdmin()){
+    $("#na-user").textContent = me.name; $("#na-role").textContent = me.role;
+    currentTab = "noadmin";
+    document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x === btn));
+    TABS.forEach(t => $("#tab-"+t).classList.toggle("hidden", t !== "noadmin"));
+    stopCam(); return;
+  }
   currentTab = tab;
   document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x.dataset.tab === tab || (tab === "login" && x.dataset.tab === wantedTab)));
   TABS.forEach(t => $("#tab-"+t).classList.toggle("hidden", t !== tab));
