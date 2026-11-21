@@ -83,6 +83,10 @@ td.n,th.n{text-align:right;white-space:nowrap}
       <button class="b ghost" id="cam-btn" type="button" style="flex:1">📷 Scanează cu camera</button>
     </div>
     <div id="video-wrap"><video id="video" playsinline muted></video></div>
+    <details id="keylog-box" style="margin-top:10px"><summary class="muted" style="cursor:pointer">Test scaner: arată tastele primite</summary>
+      <div class="muted" style="margin:6px 0">Scanează un produs și vezi ce trimite scanerul. Tastele speciale (ex. Alt+F5 pentru 1C) sunt ignorate automat.</div>
+      <pre id="keylog" style="white-space:pre-wrap;font-size:12px;background:var(--bg);padding:8px;border-radius:8px;max-height:160px;overflow:auto;margin:0"></pre>
+    </details>
     <div id="scan-msg" class="msg"></div>
     <div id="search-results" class="found"></div>
   </div>
@@ -291,6 +295,37 @@ $("#scan-input").addEventListener("input", () => {
   const v = $("#scan-input").value.trim();
   if (v.length >= 6 && findByCode(v)) autoT = setTimeout(submitScan, 350); // cod exact fără Enter
 });
+// Prefixe/sufixe de scaner configurate pentru alte programe (ex. 1C: Alt+F5 înainte de cod).
+// Tastele F1–F12 și combinațiile Alt+tastă specială nu trebuie să ajungă la browser
+// (F5 = reîncărcare pagină, Alt = meniul browserului); le ignorăm și pregătim câmpul de scanare.
+const keylog = [];
+function logKey(e, note){
+  if (!$("#keylog-box").open) return;
+  const k = (e.ctrlKey ? "Ctrl+" : "") + (e.altKey && e.key !== "Alt" ? "Alt+" : "") + (e.shiftKey && e.key.length > 1 && e.key !== "Shift" ? "Shift+" : "") + (e.key === " " ? "Spațiu" : e.key);
+  keylog.push(k + (note ? " (" + note + ")" : ""));
+  if (keylog.length > 60) keylog.shift();
+  $("#keylog").textContent = keylog.join("  ");
+}
+const isSpecialPrefix = e => /^F\d{1,2}$/.test(e.key) || (e.altKey && e.key !== "Alt" && e.key.length > 1);
+document.addEventListener("keydown", e => {
+  if (e.type === "keydown" && e.repeat) return;
+  if (isSpecialPrefix(e)){
+    e.preventDefault();
+    logKey(e, "ignorat");
+    if (!$("#tab-sell").classList.contains("hidden")){ kbBuf = ""; $("#scan-input").focus(); }
+    return;
+  }
+  if (e.key === "Alt"){ e.preventDefault(); logKey(e, "ignorat"); return; }
+  // Alt ținut apăsat în timpul codului (fără Ctrl, deci nu AltGr): browserul n-ar scrie cifra, o scriem noi.
+  if (e.altKey && !e.ctrlKey && e.key.length === 1 && !$("#tab-sell").classList.contains("hidden")){
+    e.preventDefault(); logKey(e, "fără Alt");
+    const inp = $("#scan-input"); inp.focus(); inp.value += e.key; inp.dispatchEvent(new Event("input"));
+    return;
+  }
+  if (!["Shift","Control","Meta"].includes(e.key)) logKey(e);
+}, true);
+document.addEventListener("keyup", e => { if (e.key === "Alt" || /^F\d{1,2}$/.test(e.key)) e.preventDefault(); }, true);
+
 // Dacă focusul nu e în câmp (ex. după un clic), prindem totuși scanarea de la tastatură.
 let kbBuf = "", kbLast = 0;
 document.addEventListener("keydown", e => {
