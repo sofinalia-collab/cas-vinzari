@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f6f5c">
+<title>Casa de vânzări</title>
+<style>
+:root{--bg:#f5f6f4;--card:#fff;--ink:#1d2421;--muted:#6b7570;--line:#e2e5e1;--acc:#1f6f5c;--acc2:#e8f3ef;--warn:#b4462f;--warnbg:#fbece8}
+@media (prefers-color-scheme:dark){:root{--bg:#121614;--card:#1b201e;--ink:#e8ece9;--muted:#9aa49f;--line:#2c3330;--acc:#4fb394;--acc2:#1d2d27;--warn:#ef8a74;--warnbg:#3a211b}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--acc);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:12px}
+header h1{font-size:18px;margin:0;flex:1}
+.badge{font-size:12px;background:rgba(255,255,255,.2);padding:2px 8px;border-radius:99px}
+nav{display:flex;background:var(--card);border-bottom:1px solid var(--line)}
+nav button{flex:1;border:0;background:none;padding:12px 4px;font:inherit;color:var(--muted);border-bottom:3px solid transparent;cursor:pointer}
+nav button.on{color:var(--acc);border-bottom-color:var(--acc);font-weight:600}
+main{max-width:980px;margin:0 auto;padding:16px}
+.grid{display:grid;gap:16px}
+@media (min-width:860px){.grid{grid-template-columns:1.1fr .9fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.card h2{font-size:15px;margin:0 0 10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+.row{display:flex;gap:8px;align-items:center}
+input,select{font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);width:100%;min-width:0}
+input:focus{outline:2px solid var(--acc);outline-offset:-1px}
+button.b{font:inherit;border:0;border-radius:8px;padding:10px 14px;background:var(--acc);color:#fff;cursor:pointer;white-space:nowrap}
+button.b.ghost{background:var(--acc2);color:var(--acc)}
+button.b.red{background:var(--warnbg);color:var(--warn)}
+button.b:disabled{opacity:.45;cursor:default}
+.big{font-size:18px;padding:14px 18px;width:100%}
+#video-wrap{position:relative;margin-top:10px;display:none;border-radius:10px;overflow:hidden;background:#000}
+#video-wrap.on{display:block}
+#video{width:100%;max-height:300px;object-fit:cover;display:block}
+#video-wrap::after{content:"";position:absolute;left:10%;right:10%;top:50%;height:2px;background:#ff4d4d;box-shadow:0 0 8px #ff4d4d}
+.msg{margin-top:10px;padding:10px 12px;border-radius:8px;font-size:14px;display:none}
+.msg.ok{display:block;background:var(--acc2);color:var(--acc)}
+.msg.err{display:block;background:var(--warnbg);color:var(--warn)}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th{text-align:left;font-weight:600;color:var(--muted);font-size:13px;padding:6px 4px;border-bottom:1px solid var(--line)}
+td{padding:8px 4px;border-bottom:1px solid var(--line);vertical-align:middle}
+td.n,th.n{text-align:right;white-space:nowrap}
+.qty{display:inline-flex;align-items:center;gap:4px}
+.qty button{width:30px;height:30px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:16px;cursor:pointer}
+.sums{margin-top:12px;font-size:15px;color:var(--muted)}
+.sums div{display:flex;justify-content:space-between;padding:2px 0}
+.total{display:flex;justify-content:space-between;font-size:22px;font-weight:700;margin:14px 0 10px}
+.muted{color:var(--muted);font-size:13px}
+.empty{color:var(--muted);text-align:center;padding:24px 0}
+.tag{font-size:11px;padding:1px 6px;border-radius:4px;background:var(--warnbg);color:var(--warn);margin-left:6px;vertical-align:middle}
+.hidden{display:none!important}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.kpis div{background:var(--bg);border-radius:8px;padding:10px}
+.kpis b{display:block;font-size:20px}
+.kpis span{font-size:12px;color:var(--muted)}
+#days-body tr{cursor:pointer}
+#days-body tr:hover{background:var(--acc2)}
+.scroll{overflow-x:auto}
+.found{margin-top:10px}
+.found div{padding:10px;border:1px solid var(--line);border-radius:8px;margin-top:6px;cursor:pointer}
+.found div:hover{background:var(--acc2)}
+</style>
+</head>
+<body>
+<header><h1>Casa de vânzări</h1><span class="badge" id="mode-badge">PROTOTIP · date de test</span></header>
+<nav>
+  <button data-tab="sell" class="on">Vânzare</button>
+  <button data-tab="products">Produse</button>
+  <button data-tab="report">Raport zilnic</button>
+  <button data-tab="history">Istoric</button>
+</nav>
+<main>
+
+<!-- VÂNZARE -->
+<section id="tab-sell" class="grid">
+  <div class="card">
+    <h2>Scanează produsul</h2>
+    <form id="scan-form" class="row" autocomplete="off">
+      <input id="scan-input" inputmode="numeric" placeholder="Cod de bare sau nume (scanerul USB scrie aici)" autofocus>
+      <button class="b" type="submit">Adaugă</button>
+    </form>
+    <div class="row" style="margin-top:10px">
+      <button class="b ghost" id="cam-btn" type="button" style="flex:1">📷 Scanează cu camera</button>
+    </div>
+    <div id="video-wrap"><video id="video" playsinline muted></video></div>
+    <div id="scan-msg" class="msg"></div>
+    <div id="search-results" class="found"></div>
+  </div>
+
+  <div class="card">
+    <h2>Coș</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Produs</th><th class="n">Cant.</th><th class="n">Sumă</th><th></th></tr></thead>
+      <tbody id="cart-body"></tbody>
+    </table></div>
+    <div id="cart-empty" class="empty">Coșul este gol. Scanează un produs.</div>
+    <div class="sums">
+      <div><span>Sumă fără reducere</span><span id="cart-gross">0,00</span></div>
+      <div><span>Reducere</span><span id="cart-disc">0,00</span></div>
+    </div>
+    <div class="total"><span>Sumă cu reducere</span><span id="cart-total">0,00</span></div>
+    <div class="row" style="margin-bottom:10px">
+      <select id="pay-method">
+        <option value="numerar">Numerar</option>
+        <option value="card">Card</option>
+      </select>
+    </div>
+    <div class="row">
+      <button class="b red" id="cart-clear" type="button">Golește</button>
+      <button class="b big" id="cart-pay" type="button" disabled>Încasează</button>
+    </div>
+  </div>
+</section>
+
+<!-- PRODUSE -->
+<section id="tab-products" class="hidden">
+  <div class="card" style="margin-bottom:16px">
+    <h2>Adaugă produs</h2>
+    <form id="prod-form" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+      <input id="p-sku" placeholder="Articol">
+      <input id="p-code" placeholder="Cod de bare" required>
+      <input id="p-name" placeholder="Denumire" required>
+      <input id="p-price" placeholder="Preț" type="number" step="0.01" min="0" required>
+      <input id="p-disc" placeholder="Reducere %" type="number" step="0.01" min="0" max="100">
+      <button class="b" type="submit">Salvează</button>
+    </form>
+    <p class="muted">Import nomenclator din <b>Excel (.xlsx, .xls)</b> sau CSV, prima foaie. Coloane: <b>Articol, Denumire, Cod de bare, Preț, Reducere (%)</b>. Se recunosc după antet (și în rusă: Артикул, Наименование, Штрихкод, Цена, Скидка), în orice ordine. Fără antet se ia ordinea de mai sus. Un cod care există deja se actualizează.</p>
+    <div class="row" style="flex-wrap:wrap">
+      <input type="file" id="csv-file" accept=".xlsx,.xls,.csv" style="flex:1;min-width:200px">
+      <label class="muted" style="display:flex;gap:6px;align-items:center;white-space:nowrap"><input type="checkbox" id="csv-replace" checked style="width:auto"> Înlocuiește tot catalogul</label>
+      <button class="b ghost" id="csv-export" type="button">Export produse CSV</button>
+      <button class="b red" id="reset-demo" type="button">Repune datele de test</button>
+    </div>
+    <div id="prod-msg" class="msg"></div>
+  </div>
+  <div class="card">
+    <h2>Catalog (<span id="prod-count">0</span>)</h2>
+    <input id="prod-filter" placeholder="Caută în catalog" style="margin-bottom:8px">
+    <div class="scroll"><table>
+      <thead><tr><th>Articol</th><th>Cod de bare</th><th>Denumire</th><th class="n">Preț</th><th class="n">Reducere</th><th class="n">Preț final</th><th></th></tr></thead>
+      <tbody id="prod-body"></tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- RAPORT ZILNIC -->
+<section id="tab-report" class="hidden">
+  <div class="card" style="margin-bottom:16px">
+    <h2>Raport de vânzări pe zi</h2>
+    <div class="row" style="flex-wrap:wrap;margin-bottom:12px">
+      <input type="date" id="rep-date" style="max-width:200px">
+      <button class="b" id="rep-xlsx" type="button">Descarcă raportul Excel</button>
+    </div>
+    <div id="rep-kpi" class="kpis"></div>
+    <div class="scroll" style="margin-top:12px"><table>
+      <thead><tr><th>Articol</th><th>Cod de bare</th><th>Denumire</th><th class="n">Cant.</th><th class="n">Fără reducere</th><th class="n">Reducere</th><th class="n">Cu reducere</th></tr></thead>
+      <tbody id="rep-body"></tbody>
+    </table></div>
+    <div id="rep-empty" class="empty">Nicio vânzare în ziua aleasă.</div>
+  </div>
+  <div class="card">
+    <h2>Toate zilele</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Data</th><th class="n">Vânzări</th><th class="n">Fără reducere</th><th class="n">Reducere</th><th class="n">Cu reducere</th></tr></thead>
+      <tbody id="days-body"></tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- ISTORIC -->
+<section id="tab-history" class="hidden">
+  <div class="card">
+    <h2>Vânzări</h2>
+    <div class="row" style="margin-bottom:10px;flex-wrap:wrap">
+      <span id="hist-summary" style="flex:1"></span>
+      <button class="b ghost" id="sales-export" type="button">Export vânzări CSV</button>
+    </div>
+    <div class="scroll"><table>
+      <thead><tr><th>Nr.</th><th>Data</th><th>Produse</th><th>Plată</th><th class="n">Fără reducere</th><th class="n">Reducere</th><th class="n">Cu reducere</th></tr></thead>
+      <tbody id="hist-body"></tbody>
+    </table></div>
+    <div id="hist-empty" class="empty">Nicio vânzare încă.</div>
+  </div>
+</section>
+</main>
+
+<script>/*ZXING*/</script>
+<script>/*XLSX*/</script>
+<script>
+"use strict";
+// ---------- stocare locală (în prototip; în versiunea reală: server / 1C / Google Sheets) ----------
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+// DATE DE TEST: coduri și prețuri inventate, NU sunt produse reale.
+const DEMO = [
+  {sku:"TEST-001", code:"2000000000015", name:"[TEST] Produs A", price:10.00,  disc:0},
+  {sku:"TEST-002", code:"2000000000022", name:"[TEST] Produs B", price:25.50,  disc:10},
+  {sku:"TEST-003", code:"2000000000039", name:"[TEST] Produs C", price:99.90,  disc:0},
+  {sku:"TEST-004", code:"2000000000046", name:"[TEST] Produs D", price:4.75,   disc:0},
+  {sku:"TEST-005", code:"2000000000053", name:"[TEST] Produs E", price:150.00, disc:25}
+];
+// Reducerea = procent (presupunere, de confirmat). Prețul final se rotunjește la 2 zecimale.
+const finalPrice = p => Math.round(p.price * (100 - (p.disc || 0))) / 100;
+let products = store.get("pos.products2", null) || DEMO.slice();
+let sales = store.get("pos.sales", []);
+let cart = [];
+const $ = s => document.querySelector(s);
+const fmt = n => n.toLocaleString("ro-RO",{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const saveProducts = () => store.set("pos.products2", products);
+const saveSales = () => store.set("pos.sales", sales);
+
+// ---------- tab-uri ----------
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x === b));
+  ["sell","products","report","history"].forEach(t => $("#tab-"+t).classList.toggle("hidden", t !== b.dataset.tab));
+  if (b.dataset.tab !== "sell") stopCam();
+  if (b.dataset.tab === "sell") $("#scan-input").focus();
+  renderProducts(); renderHistory(); renderReport();
+});
+
+// ---------- mesaje + sunet ----------
+function msg(el, text, ok){ el.textContent = text; el.className = "msg " + (ok ? "ok" : "err"); }
+let actx;
+function beep(ok){
+  try{ actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.frequency.value = ok ? 1200 : 300; g.gain.value = .08; o.connect(g); g.connect(actx.destination);
+    o.start(); o.stop(actx.currentTime + (ok ? .08 : .25));
+  }catch(e){}
+  if (navigator.vibrate) navigator.vibrate(ok ? 40 : [80,40,80]);
+}
+
+// ---------- găsire produs + coș ----------
+function findByCode(code){ code = code.trim(); return products.find(p => p.code === code); }
+function findBySku(q){ q = q.trim().toLowerCase(); const m = products.filter(p => (p.sku||"").toLowerCase() === q); return m.length === 1 ? m[0] : null; }
+function addToCart(p){
+  const line = cart.find(l => l.code === p.code);
+  if (line) line.qty++; else cart.push({sku:p.sku||"", code:p.code, name:p.name, price:p.price, disc:p.disc||0, unit:finalPrice(p), qty:1});
+  renderCart();
+  msg($("#scan-msg"), "✓ " + p.name + " · " + fmt(finalPrice(p)) + (p.disc ? " (reducere " + p.disc + "%)" : ""), true);
+}
+function handleCode(raw){
+  const q = raw.trim(); $("#search-results").innerHTML = "";
+  if (!q) return;
+  const p = findByCode(q);
+  const ps = p || findBySku(q);
+  if (ps){ beep(true); addToCart(ps); return; }
+  // nu e cod exact: căutare după nume
+  const hits = products.filter(x => x.name.toLowerCase().includes(q.toLowerCase()) || x.code.includes(q) || (x.sku||"").toLowerCase() === q.toLowerCase()).slice(0,8);
+  if (hits.length){
+    msg($("#scan-msg"), "Alege produsul:", true);
+    $("#search-results").innerHTML = hits.map(h => `<div data-code="${esc(h.code)}">${esc(h.name)} <span class="muted">· art. ${esc(h.sku||"—")} · ${esc(h.code)} · ${fmt(finalPrice(h))}</span></div>`).join("");
+    $("#search-results").querySelectorAll("div").forEach(d => d.onclick = () => { addToCart(findByCode(d.dataset.code)); $("#search-results").innerHTML=""; $("#scan-input").focus(); });
+  } else {
+    beep(false);
+    msg($("#scan-msg"), "Codul „" + q + "” nu există în catalog. Adaugă-l în fila Produse.", false);
+  }
+}
+$("#scan-form").onsubmit = e => { e.preventDefault(); submitScan(); };
+function submitScan(){ clearTimeout(autoT); const v = $("#scan-input").value; $("#scan-input").value = ""; handleCode(v); $("#scan-input").focus(); }
+// Scaner USB = tastatură. Unele scanere trimit Tab în loc de Enter, altele nimic.
+let autoT = null;
+$("#scan-input").addEventListener("keydown", e => { if (e.key === "Tab" && $("#scan-input").value.trim()){ e.preventDefault(); submitScan(); } });
+$("#scan-input").addEventListener("input", () => {
+  clearTimeout(autoT);
+  const v = $("#scan-input").value.trim();
+  if (v.length >= 6 && findByCode(v)) autoT = setTimeout(submitScan, 350); // cod exact fără Enter
+});
+// Dacă focusul nu e în câmp (ex. după un clic), prindem totuși scanarea de la tastatură.
+let kbBuf = "", kbLast = 0;
+document.addEventListener("keydown", e => {
+  if ($("#tab-sell").classList.contains("hidden")) return;
+  const t = e.target;
+  if (t === $("#scan-input") || ["INPUT","SELECT","TEXTAREA"].includes(t.tagName)) return;
+  const now = Date.now();
+  if (now - kbLast > 120) kbBuf = "";
+  kbLast = now;
+  if ((e.key === "Enter" || e.key === "Tab") && kbBuf.length >= 3){ e.preventDefault(); handleCode(kbBuf); kbBuf = ""; $("#scan-input").focus(); return; }
+  if (e.key.length === 1){ kbBuf += e.key; if (kbBuf.length >= 6 && findByCode(kbBuf)){ clearTimeout(autoT); const c = kbBuf; autoT = setTimeout(() => { if (kbBuf === c){ handleCode(c); kbBuf = ""; } }, 350); } }
+});
+// clic oriunde în fila Vânzare readuce focusul în câmpul de scanare
+$("#tab-sell").addEventListener("click", e => { if (!e.target.closest("input,select,button,#search-results")) $("#scan-input").focus(); });
+
+function cartTotals(){
+  const gross = cart.reduce((s,l) => s + Math.round(l.price*100)*l.qty, 0) / 100;
+  const total = cart.reduce((s,l) => s + Math.round(l.unit*100)*l.qty, 0) / 100;
+  return {gross, total, disc: Math.round((gross - total)*100)/100};
+}
+function renderCart(){
+  const tb = $("#cart-body");
+  tb.innerHTML = cart.map((l,i) => `<tr>
+    <td>${esc(l.name)}<div class="muted">${l.disc ? `<s>${fmt(l.price)}</s> −${l.disc}% = ` : ""}${fmt(l.unit)} × ${l.qty}</div></td>
+    <td class="n"><span class="qty"><button data-i="${i}" data-d="-1">−</button>${l.qty}<button data-i="${i}" data-d="1">+</button></span></td>
+    <td class="n">${fmt(Math.round(l.unit*100)*l.qty/100)}</td>
+    <td class="n"><button class="b red" style="padding:4px 8px" data-del="${i}">✕</button></td></tr>`).join("");
+  tb.querySelectorAll("[data-d]").forEach(b => b.onclick = () => { const l = cart[b.dataset.i]; l.qty += +b.dataset.d; if (l.qty<=0) cart.splice(b.dataset.i,1); renderCart(); });
+  tb.querySelectorAll("[data-del]").forEach(b => b.onclick = () => { cart.splice(b.dataset.del,1); renderCart(); });
+  const total = cart.reduce((s,l) => s + Math.round(l.unit*100)*l.qty, 0) / 100;
+  const t = cartTotals();
+  $("#cart-gross").textContent = fmt(t.gross);
+  $("#cart-disc").textContent = (t.disc ? "−" : "") + fmt(t.disc);
+  $("#cart-total").textContent = fmt(total);
+  $("#cart-empty").classList.toggle("hidden", cart.length > 0);
+  $("#cart-pay").disabled = !cart.length;
+}
+$("#cart-clear").onclick = () => { cart = []; renderCart(); $("#scan-msg").className = "msg"; };
+$("#cart-pay").onclick = () => {
+  if (!cart.length) return;
+  const total = cart.reduce((s,l) => s + Math.round(l.unit*100)*l.qty, 0) / 100;
+  const no = (sales.reduce((m,s) => Math.max(m, s.no), 0)) + 1;
+  sales.push({no, date:new Date().toISOString(), pay:$("#pay-method").value, items:cart.map(l => ({...l})), gross:cartTotals().gross, discount:cartTotals().disc, total});
+  saveSales();
+  cart = []; renderCart();
+  msg($("#scan-msg"), "Vânzarea nr. " + no + " a fost înregistrată · " + fmt(total), true);
+  beep(true); $("#scan-input").focus();
+};
+
+// ---------- camera ----------
+let stream = null, zxReader = null, camOn = false, lastCode = "", lastTime = 0;
+function onCamCode(code){
+  const now = Date.now();
+  if (code === lastCode && now - lastTime < 2000) return; // evită dublarea aceluiași cod
+  lastCode = code; lastTime = now; handleCode(code);
+}
+async function startCam(){
+  const video = $("#video");
+  if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    msg($("#scan-msg"), "Camera nu e disponibilă aici: pagina trebuie deschisă direct în Chrome/Safari de la o adresă https (nu din previzualizarea unui fișier). Scanerul USB și tastarea codului merg oricum.", false);
+    return;
+  }
+  try{
+    if ("BarcodeDetector" in window){
+      const formats = await BarcodeDetector.getSupportedFormats();
+      const det = new BarcodeDetector({formats: formats.filter(f => ["ean_13","ean_8","upc_a","upc_e","code_128","code_39","qr_code","itf"].includes(f))});
+      stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+      video.srcObject = stream; await video.play(); camOn = true;
+      $("#video-wrap").classList.add("on");
+      const loop = async () => {
+        if (!camOn) return;
+        try{ const r = await det.detect(video); if (r.length) onCamCode(r[0].rawValue); }catch(e){}
+        setTimeout(loop, 150);
+      };
+      loop();
+    } else if (window.ZXing){
+      zxReader = new ZXing.BrowserMultiFormatReader();
+      camOn = true; $("#video-wrap").classList.add("on");
+      await zxReader.decodeFromConstraints({video:{facingMode:"environment"}}, video, (res) => { if (res) onCamCode(res.getText()); });
+    } else throw new Error("Browserul nu poate citi coduri de bare.");
+    $("#cam-btn").textContent = "⏹ Oprește camera";
+  }catch(e){
+    stopCam();
+    const denied = e && (e.name === "NotAllowedError" || e.name === "SecurityError");
+    msg($("#scan-msg"), denied
+      ? "Camera nu are permisiune. Deschide pagina direct în Chrome/Safari (nu din previzualizarea din chat) de la o adresă https, apoi apasă „Permite” când întreabă de cameră. Dacă ai refuzat deja: lacătul de lângă adresă → Permisiuni → Cameră → Permite."
+      : "Camera nu a pornit: " + (e.message || e) + ".", false);
+  }
+}
+function stopCam(){
+  camOn = false;
+  if (zxReader){ try{ zxReader.reset(); }catch(e){} zxReader = null; }
+  if (stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
+  $("#video-wrap").classList.remove("on");
+  $("#cam-btn").textContent = "📷 Scanează cu camera";
+}
+$("#cam-btn").onclick = () => camOn ? stopCam() : startCam();
+
+// ---------- produse ----------
+function renderProducts(){
+  const f = ($("#prod-filter").value || "").toLowerCase();
+  const list = products.filter(p => !f || p.name.toLowerCase().includes(f) || p.code.includes(f) || (p.sku||"").toLowerCase().includes(f));
+  $("#prod-count").textContent = products.length;
+  $("#prod-body").innerHTML = list.map(p => `<tr><td>${esc(p.sku||"")}</td><td>${esc(p.code)}</td><td>${esc(p.name)}</td><td class="n">${fmt(p.price)}</td><td class="n">${p.disc ? p.disc + "%" : "—"}</td><td class="n">${fmt(finalPrice(p))}</td>
+    <td class="n"><button class="b red" style="padding:4px 8px" data-pdel="${esc(p.code)}">✕</button></td></tr>`).join("");
+  $("#prod-body").querySelectorAll("[data-pdel]").forEach(b => b.onclick = () => { products = products.filter(p => p.code !== b.dataset.pdel); saveProducts(); renderProducts(); });
+}
+$("#prod-filter").oninput = renderProducts;
+$("#prod-form").onsubmit = e => {
+  e.preventDefault();
+  const p = {sku:$("#p-sku").value.trim(), code:$("#p-code").value.trim(), name:$("#p-name").value.trim(), price:parseFloat($("#p-price").value), disc:parseFloat($("#p-disc").value) || 0};
+  const i = products.findIndex(x => x.code === p.code);
+  if (i >= 0) products[i] = p; else products.push(p);
+  saveProducts(); renderProducts(); e.target.reset();
+  msg($("#prod-msg"), (i >= 0 ? "Actualizat: " : "Adăugat: ") + p.name, true);
+};
+// Recunoaștere coloane după antet (RO / RU / EN)
+const COLS = {
+  sku:   /^(articol|artikul|артикул|cod articol|sku|art\.?)$/i,
+  code:  /^(cod|cod de bare|cod bare|barcode|ean|штрих|штрихкод|штрих-код|штрих код)/i,
+  name:  /^(denumire|nume|produs|наименование|номенклатура|товар|name)/i,
+  price: /^(pre[tț]|pret vanzare|цена|price)/i,
+  disc:  /^(reducere|discount|reduceri|скидка|% ?скидки|reducere ?%)/i
+};
+function rowsToProducts(rows){
+  rows = rows.map(r => (r||[]).map(c => c === null || c === undefined ? "" : String(c).trim())).filter(r => r.some(c => c));
+  if (!rows.length) return {items:[], map:null};
+  // caută rândul de antet în primele 10 rânduri
+  let hdr = -1, map = null;
+  for (let i = 0; i < Math.min(10, rows.length); i++){
+    const m = {};
+    rows[i].forEach((c, j) => { for (const k in COLS) if (m[k] === undefined && COLS[k].test(c)) m[k] = j; });
+    if (m.code !== undefined && m.name !== undefined){ hdr = i; map = m; break; }
+  }
+  if (!map) map = {sku:0, name:1, code:2, price:3, disc:4};
+  const num = v => { const n = parseFloat(String(v).replace(/\s/g,"").replace(",", ".")); return isNaN(n) ? null : n; };
+  const items = rows.slice(hdr + 1).map(r => ({
+    sku: map.sku !== undefined ? String(r[map.sku] ?? "") : "",
+    code: String(r[map.code] ?? "").replace(/\.0+$/,"").replace(/\s/g,""),
+    name: r[map.name] ?? "",
+    price: map.price !== undefined ? num(r[map.price]) : null,
+    disc: map.disc !== undefined ? Math.min(100, Math.max(0, num(String(r[map.disc]).replace("%","")) || 0)) : 0
+  })).filter(p => p.code && p.name);
+  return {items, map, headerFound: hdr >= 0};
+}
+async function readFileRows(file){
+  if (/\.csv$/i.test(file.name)){
+    const text = (await file.text()).replace(/^\uFEFF/,"");
+    const first = text.split(/\r?\n/)[0] || "";
+    const sep = (first.match(/;/g)||[]).length >= (first.match(/,/g)||[]).length ? ";" : ",";
+    return text.split(/\r?\n/).map(l => { const out=[]; let cur="", q=false; for (const ch of l){ if (ch === '"') q = !q; else if (ch === sep && !q){ out.push(cur); cur=""; } else cur += ch; } out.push(cur); return out; });
+  }
+  const wb = XLSX.read(await file.arrayBuffer(), {type:"array"});
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:""});
+}
+$("#csv-file").onchange = async e => {
+  const file = e.target.files[0]; if (!file) return;
+  try{
+    const {items, headerFound} = rowsToProducts(await readFileRows(file));
+    if (!items.length) throw new Error("nu am găsit produse (verifică coloanele Cod de bare și Denumire)");
+    if ($("#csv-replace").checked) products = [];
+    let added = 0, updated = 0, noPrice = 0;
+    items.forEach(r => { if (r.price === null){ noPrice++; r.price = 0; }
+      const i = products.findIndex(p => p.code === r.code); if (i >= 0){ products[i] = r; updated++; } else { products.push(r); added++; } });
+    saveProducts(); renderProducts();
+    msg($("#prod-msg"), `Import „${file.name}”: ${added} adăugate, ${updated} actualizate` + (noPrice ? `, ${noPrice} fără preț (pus 0, de verificat)` : "") + (headerFound ? "." : ". Antet nerecunoscut: s-a folosit ordinea articol, denumire, cod de bare, preț, reducere."), items.length > 0 && !noPrice);
+  }catch(err){ msg($("#prod-msg"), "Fișierul nu a putut fi citit: " + (err.message || err), false); }
+  e.target.value = "";
+};
+// Salvare fișier: în pagina publicată pe claude.ai prin capabilitatea "downloads", altfel link obișnuit.
+let dlCap; const dlReady = (window.claude && claude.use) ? claude.use("downloads").then(d => dlCap = d).catch(() => dlCap = null) : Promise.resolve(dlCap = null);
+function toast(t){ let d = $("#toast"); if (!d){ d = document.createElement("div"); d.id = "toast"; d.style.cssText = "position:fixed;left:16px;right:16px;bottom:16px;padding:12px;border-radius:8px;background:var(--warnbg);color:var(--warn);z-index:9;text-align:center"; document.body.appendChild(d); } d.textContent = t; d.style.display = "block"; setTimeout(() => d.style.display = "none", 5000); }
+async function saveFile(name, blob){
+  if (window.claude && claude.use){ await dlReady; }
+  if (dlCap){
+    try{ await dlCap.save({filename:name, data:blob}); }
+    catch(e){ if (e && e.code !== "declined") toast("Fișierul nu a putut fi salvat aici (" + (e.code || e) + ")."); }
+    return;
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function download(name, text){ saveFile(name, new Blob(["\uFEFF" + text], {type:"text/csv;charset=utf-8"})); }
+const csvCell = v => /[;"\n]/.test(String(v)) ? '"' + String(v).replace(/"/g,'""') + '"' : String(v);
+$("#csv-export").onclick = () => download("produse.csv", "articol;denumire;cod de bare;pret;reducere\n" + products.map(p => [p.sku||"",p.name,p.code,String(p.price).replace(".",","),String(p.disc||0).replace(".",",")].map(csvCell).join(";")).join("\n"));
+$("#reset-demo").onclick = () => { products = DEMO.map(p => ({...p})); saveProducts(); renderProducts(); msg($("#prod-msg"), "Catalogul de test a fost repus.", true); };
+
+// ---------- raport zilnic ----------
+const pad = n => String(n).padStart(2,"0");
+const dayKey = iso => { const d = new Date(iso); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); };
+const dayLabel = k => k.split("-").reverse().join(".");
+const r2 = x => Math.round(x*100)/100;
+function dayReport(key){
+  const list = sales.filter(s => dayKey(s.date) === key);
+  const byProd = {};
+  const pay = {};
+  let gross = 0, total = 0;
+  list.forEach(s => {
+    gross += Math.round((s.gross ?? s.total)*100); total += Math.round(s.total*100);
+    pay[s.pay] = (pay[s.pay] || 0) + Math.round(s.total*100);
+    s.items.forEach(i => {
+      const p = byProd[i.code] || (byProd[i.code] = {sku:i.sku||"", code:i.code, name:i.name, qty:0, gross:0, net:0});
+      p.qty += i.qty; p.gross += Math.round(i.price*100)*i.qty; p.net += Math.round((i.unit ?? i.price)*100)*i.qty;
+    });
+  });
+  const prods = Object.values(byProd).map(p => ({...p, gross:p.gross/100, net:p.net/100, disc:(p.gross-p.net)/100})).sort((a,b) => b.net - a.net);
+  Object.keys(pay).forEach(k => pay[k] /= 100);
+  return {key, list, prods, pay, gross:gross/100, total:total/100, disc:(gross-total)/100};
+}
+function renderReport(){
+  const inp = $("#rep-date");
+  if (!inp.value) inp.value = dayKey(new Date().toISOString());
+  const r = dayReport(inp.value);
+  const payTxt = Object.entries(r.pay).map(([k,v]) => `<div><span>Încasat ${esc(k)}</span><b>${fmt(v)}</b></div>`).join("");
+  $("#rep-kpi").innerHTML = `<div><span>Vânzări (bonuri)</span><b>${r.list.length}</b></div>
+    <div><span>Sumă fără reducere</span><b>${fmt(r.gross)}</b></div>
+    <div><span>Reduceri</span><b>${fmt(r.disc)}</b></div>
+    <div><span>Sumă cu reducere (încasat)</span><b>${fmt(r.total)}</b></div>` + payTxt;
+  $("#rep-body").innerHTML = r.prods.map(p => `<tr><td>${esc(p.sku)}</td><td>${esc(p.code)}</td><td>${esc(p.name)}</td><td class="n">${p.qty}</td><td class="n">${fmt(p.gross)}</td><td class="n">${fmt(p.disc)}</td><td class="n">${fmt(p.net)}</td></tr>`).join("");
+  $("#rep-empty").classList.toggle("hidden", r.list.length > 0);
+  $("#rep-xlsx").disabled = !r.list.length;
+  const keys = [...new Set(sales.map(s => dayKey(s.date)))].sort().reverse();
+  $("#days-body").innerHTML = keys.map(k => { const d = dayReport(k); return `<tr data-k="${k}"><td>${dayLabel(k)}</td><td class="n">${d.list.length}</td><td class="n">${fmt(d.gross)}</td><td class="n">${fmt(d.disc)}</td><td class="n"><b>${fmt(d.total)}</b></td></tr>`; }).join("") || `<tr><td colspan="5" class="empty">Nicio vânzare încă.</td></tr>`;
+  $("#days-body").querySelectorAll("tr[data-k]").forEach(tr => tr.onclick = () => { inp.value = tr.dataset.k; renderReport(); window.scrollTo({top:0, behavior:"smooth"}); });
+}
+$("#rep-date").onchange = renderReport;
+$("#rep-xlsx").onclick = () => {
+  const r = dayReport($("#rep-date").value);
+  const wb = XLSX.utils.book_new();
+  const sum = [["Raport de vânzări", dayLabel(r.key)], [], ["Vânzări (bonuri)", r.list.length], ["Sumă fără reducere", r.gross], ["Reduceri", r2(r.disc)], ["Sumă cu reducere (încasat)", r.total], []]
+    .concat(Object.entries(r.pay).map(([k,v]) => ["Încasat " + k, v]));
+  const ws1 = XLSX.utils.aoa_to_sheet(sum); ws1["!cols"] = [{wch:30},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws1, "Rezumat");
+  const ws2 = XLSX.utils.aoa_to_sheet([["Articol","Cod de bare","Denumire","Cantitate","Sumă fără reducere","Reducere","Sumă cu reducere"]].concat(r.prods.map(p => [p.sku, p.code, p.name, p.qty, p.gross, r2(p.disc), p.net])));
+  ws2["!cols"] = [{wch:12},{wch:16},{wch:36},{wch:10},{wch:18},{wch:12},{wch:18}];
+  XLSX.utils.book_append_sheet(wb, ws2, "Pe produse");
+  const rows = [["Nr. bon","Ora","Articol","Cod de bare","Denumire","Cantitate","Preț","Reducere %","Preț final","Sumă fără reducere","Sumă cu reducere","Plată"]];
+  r.list.forEach(s => s.items.forEach(i => rows.push([s.no, new Date(s.date).toLocaleTimeString("ro-RO"), i.sku||"", i.code, i.name, i.qty, i.price, i.disc||0, i.unit ?? i.price, r2(i.price*i.qty), Math.round((i.unit ?? i.price)*100)*i.qty/100, s.pay])));
+  const ws3 = XLSX.utils.aoa_to_sheet(rows); ws3["!cols"] = [{wch:8},{wch:10},{wch:12},{wch:16},{wch:36}];
+  XLSX.utils.book_append_sheet(wb, ws3, "Bonuri");
+  saveFile("raport-vanzari-" + r.key + ".xlsx", new Blob([XLSX.write(wb, {bookType:"xlsx", type:"array"})]));
+};
+
+// ---------- istoric ----------
+function renderHistory(){
+  const today = new Date().toDateString();
+  const t = sales.filter(s => new Date(s.date).toDateString() === today);
+  const sum = t.reduce((a,s) => a + Math.round(s.total*100), 0) / 100;
+  const g = t.reduce((a,s) => a + Math.round((s.gross ?? s.total)*100), 0) / 100;
+  $("#hist-summary").textContent = `Azi: ${t.length} vânzări · fără reducere ${fmt(g)} · reduceri ${fmt(Math.round((g-sum)*100)/100)} · încasat ${fmt(sum)}`;
+  $("#hist-body").innerHTML = sales.slice().reverse().map(s => `<tr><td>${s.no}</td><td>${new Date(s.date).toLocaleString("ro-RO")}</td>
+    <td>${s.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")}</td><td>${esc(s.pay)}</td><td class="n">${fmt(s.gross ?? s.total)}</td><td class="n">${fmt(s.discount || 0)}</td><td class="n"><b>${fmt(s.total)}</b></td></tr>`).join("");
+  $("#hist-empty").classList.toggle("hidden", sales.length > 0);
+}
+$("#sales-export").onclick = () => download("vanzari.csv", "nr;data;articol;cod de bare;denumire;cantitate;pret;reducere %;pret final;suma fara reducere;suma cu reducere;plata\n" +
+  sales.flatMap(s => s.items.map(i => [s.no, new Date(s.date).toLocaleString("ro-RO"), i.sku||"", i.code, i.name, i.qty, String(i.price).replace(".",","), String(i.disc||0).replace(".",","), String(i.unit).replace(".",","), String(Math.round(i.price*100)*i.qty/100).replace(".",","), String(Math.round(i.unit*100)*i.qty/100).replace(".",","), s.pay].map(csvCell).join(";"))).join("\n"));
+
+renderCart(); renderProducts(); renderHistory(); renderReport();
+</script>
+</body>
+</html>
