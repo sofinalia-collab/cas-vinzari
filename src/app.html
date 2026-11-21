@@ -49,6 +49,17 @@ td.n,th.n{text-align:right;white-space:nowrap}
 .empty{color:var(--muted);text-align:center;padding:24px 0}
 .tag{font-size:11px;padding:1px 6px;border-radius:4px;background:var(--warnbg);color:var(--warn);margin-left:6px;vertical-align:middle}
 .hidden{display:none!important}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow:auto}
+.modal-box{background:var(--card);color:var(--ink);border-radius:12px;padding:18px;width:100%;max-width:380px;box-shadow:0 10px 40px rgba(0,0,0,.3)}
+.rc{font-family:ui-monospace,"Cascadia Mono",Consolas,monospace;font-size:14px}
+.rc h3{text-align:center;margin:0 0 2px;font-size:16px}
+.rc .c{text-align:center;color:var(--muted);font-size:12px}
+.rc hr{border:0;border-top:1px dashed var(--muted);margin:10px 0}
+.rc .it{margin:8px 0}
+.rc .ln{display:flex;justify-content:space-between;gap:10px}
+.rc .sub{color:var(--muted);font-size:12px}
+.rc .tot{font-weight:700;font-size:17px}
+@media print{body>*:not(#receipt-modal){display:none!important}#receipt-modal{position:static;background:none;padding:0}.modal-box{box-shadow:none;max-width:none}.no-print{display:none!important}}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
 .kpis div{background:var(--bg);border-radius:8px;padding:10px}
 .kpis b{display:block;font-size:20px}
@@ -180,13 +191,24 @@ td.n,th.n{text-align:right;white-space:nowrap}
       <button class="b ghost" id="sales-export" type="button">Export vânzări CSV</button>
     </div>
     <div class="scroll"><table>
-      <thead><tr><th>Nr.</th><th>Data</th><th>Produse</th><th>Plată</th><th class="n">Nr. produse</th><th class="n">Fără reducere</th><th class="n">Reducere</th><th class="n">Cu reducere</th></tr></thead>
+      <thead><tr><th>Nr.</th><th>Data</th><th>Produse</th><th>Plată</th><th class="n">Nr. produse</th><th class="n">Fără reducere</th><th class="n">Reducere</th><th class="n">Cu reducere</th><th></th></tr></thead>
       <tbody id="hist-body"></tbody>
     </table></div>
     <div id="hist-empty" class="empty">Nicio vânzare încă.</div>
   </div>
 </section>
 </main>
+
+<!-- BON -->
+<div id="receipt-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="rc-title">
+  <div class="modal-box">
+    <div id="receipt"></div>
+    <div class="row no-print" style="margin-top:14px">
+      <button class="b ghost" id="rc-print" type="button" style="flex:1">Tipărește</button>
+      <button class="b" id="rc-close" type="button" style="flex:1">Închide</button>
+    </div>
+  </div>
+</div>
 
 <script>/*ZXING*/</script>
 <script>/*XLSX*/</script>
@@ -548,6 +570,38 @@ $("#rep-xlsx").onclick = () => {
   saveFile("raport-vanzari-" + r.key + ".xlsx", new Blob([XLSX.write(wb, {bookType:"xlsx", type:"array"})]));
 };
 
+// ---------- vizualizare bon ----------
+function showReceipt(no){
+  const s = sales.find(x => x.no === no); if (!s) return;
+  const items = s.items.map(i => {
+    const unit = i.unit ?? i.price, gross = Math.round(i.price*100)*i.qty/100, net = Math.round(unit*100)*i.qty/100;
+    return `<div class="it"><div>${esc(i.name)}</div>
+      <div class="sub">${i.sku ? "art. " + esc(i.sku) + " · " : ""}${esc(i.code)}</div>
+      <div class="ln"><span>${i.qty} × ${fmt(i.price)}</span><span>${fmt(gross)}</span></div>
+      ${i.disc ? `<div class="ln sub"><span>Reducere ${i.disc}%</span><span>−${fmt(r2(gross - net))}</span></div>` : ""}
+      ${i.disc ? `<div class="ln"><span>Cu reducere</span><span>${fmt(net)}</span></div>` : ""}</div>`;
+  }).join("");
+  const qty = s.items.reduce((a,i) => a + i.qty, 0);
+  $("#receipt").innerHTML = `<div class="rc">
+    <h3 id="rc-title">Bon nr. ${s.no}</h3>
+    <div class="c">${new Date(s.date).toLocaleString("ro-RO")}</div>
+    <hr>${items}<hr>
+    <div class="ln"><span>Produse</span><span>${qty} buc. (${s.items.length} poziții)</span></div>
+    <div class="ln"><span>Sumă fără reducere</span><span>${fmt(s.gross ?? s.total)}</span></div>
+    <div class="ln"><span>Reducere</span><span>−${fmt(s.discount || 0)}</span></div>
+    <hr>
+    <div class="ln tot"><span>TOTAL</span><span>${fmt(s.total)}</span></div>
+    <div class="ln"><span>Plată</span><span>${esc(s.pay)}</span></div>
+    <div class="c" style="margin-top:10px">Document intern, nu este bon fiscal</div></div>`;
+  $("#receipt-modal").classList.remove("hidden");
+  $("#rc-close").focus();
+}
+const closeReceipt = () => $("#receipt-modal").classList.add("hidden");
+$("#rc-close").onclick = closeReceipt;
+$("#rc-print").onclick = () => window.print();
+$("#receipt-modal").addEventListener("click", e => { if (e.target.id === "receipt-modal") closeReceipt(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#receipt-modal").classList.contains("hidden")) closeReceipt(); });
+
 // ---------- istoric ----------
 function renderHistory(){
   const today = new Date().toDateString();
@@ -556,7 +610,8 @@ function renderHistory(){
   const g = t.reduce((a,s) => a + Math.round((s.gross ?? s.total)*100), 0) / 100;
   $("#hist-summary").textContent = `Azi: ${t.length} vânzări · fără reducere ${fmt(g)} · reduceri ${fmt(Math.round((g-sum)*100)/100)} · încasat ${fmt(sum)}`;
   $("#hist-body").innerHTML = sales.slice().reverse().map(s => `<tr><td>${s.no}</td><td>${new Date(s.date).toLocaleString("ro-RO")}</td>
-    <td>${s.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")}</td><td>${esc(s.pay)}</td><td class="n">${s.items.reduce((a,i) => a + i.qty, 0)}${s.items.length > 1 ? `<div class="muted">${s.items.length} poziții</div>` : ""}</td><td class="n">${fmt(s.gross ?? s.total)}</td><td class="n">${fmt(s.discount || 0)}</td><td class="n"><b>${fmt(s.total)}</b></td></tr>`).join("");
+    <td>${s.items.map(i => esc(i.name) + " ×" + i.qty).join(", ")}</td><td>${esc(s.pay)}</td><td class="n">${s.items.reduce((a,i) => a + i.qty, 0)}${s.items.length > 1 ? `<div class="muted">${s.items.length} poziții</div>` : ""}</td><td class="n">${fmt(s.gross ?? s.total)}</td><td class="n">${fmt(s.discount || 0)}</td><td class="n"><b>${fmt(s.total)}</b></td><td class="n"><button class="b ghost" style="padding:6px 10px" data-bon="${s.no}">Vezi bon</button></td></tr>`).join("");
+  $("#hist-body").querySelectorAll("[data-bon]").forEach(b => b.onclick = () => showReceipt(+b.dataset.bon));
   $("#hist-empty").classList.toggle("hidden", sales.length > 0);
 }
 $("#sales-export").onclick = () => download("vanzari.csv", "nr;data;articol;cod de bare;denumire;cantitate;pret;reducere %;pret final;suma fara reducere;suma cu reducere;plata\n" +
